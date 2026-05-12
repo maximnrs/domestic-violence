@@ -1,0 +1,24 @@
+logging {
+  level = "warn"
+}
+
+local.file_match "system_logs" {
+  path_targets = [
+    {"__path__" = "/var/log/syslog", "host" = "HOSTNAME"},
+    {"__path__" = "/var/log/auth.log", "host" = "HOSTNAME"},
+    {"__path__" = "/var/log/kern.log", "host" = "HOSTNAME"},
+    {"__path__" = "/var/log/dpkg.log", "host" = "HOSTNAME"},
+  ]
+}
+
+loki.source.file "system_logs" {
+  targets    = local.file_match.system_logs.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url       = "http://192.168.178.242:3100/loki/api/v1/push"
+    tenant_id = "tenant1"
+  }
+}
