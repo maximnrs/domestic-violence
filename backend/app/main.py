@@ -1,26 +1,15 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.config import Settings
-from app.routers import auth          
-
-settings = Settings()
+from app.models import user
+from app.controllers import auth as auth_controller
 
 app = FastAPI(
     title="EviSafe API",
-    description="Secure evidence management API for domestic violence cases",
-    version="0.1.0",
+    description="Secure evidence management API for EviSafe",
+    version="0.1.0"
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # tighten this down once mobile app IP is known
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.include_router(auth_controller.router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": "0.1.0"}
-
-app.include_router(auth.router)       
+    return {"status": "ok", "message": "EviSafe API is running"}
