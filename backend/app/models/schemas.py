@@ -27,3 +27,24 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+class CaseCreate(BaseModel):
+    case_title: str
+    description: str | None = None
+    status: str | None = "open"
+
+class CaseUpdate(BaseModel):
+    case_title: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+class CaseResponse(BaseModel):
+    case_id: int
+    user_id: int
+    case_title: str
+    description: str | None
+    creation_date: date
+    status: str | None
+
+    class Config:
+        from_attributes = True
