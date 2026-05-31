@@ -3,11 +3,16 @@ from sqlalchemy import select
 from app.models.user import User
 from app.models.schemas import UserCreate
 from passlib.context import CryptContext
-from jose import jwt
+from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from app.config import settings
+from app.core.database import get_db
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -49,7 +54,29 @@ async def login_user(db: AsyncSession, email: str, password: str) -> str:
     if not user or not verify_password(password, user.password_hash):
         raise ValueError("Invalid email or password")
 
-    if not user.account_status:
+    if user.account_status is False or user.account_status is None:
         raise ValueError("Account is disabled")
 
     return create_access_token(user.user_id, user.email)
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    result = await db.execute(select(User).where(User.user_id == int(user_id)))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.account_status:
+        raise HTTPException(status_code=403, detail="Account is disabled")
+
+    return user
