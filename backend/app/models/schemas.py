@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import date
 from datetime import time
+from datetime import datetime
 from app.models.incident import IncidentType
 
 #Users----------------------------------------------
@@ -78,6 +79,50 @@ class IncidentResponse(BaseModel):
     incident_type: IncidentType | None
     description: str | None
     creation_date: date
+
+    class Config:
+        from_attributes = True
+
+#evidencetype-------------------------------------
+class EvidenceTypeResponse(BaseModel):
+    evidence_type_id: int
+    type_name: str
+    description: str | None
+
+    class Config:
+        from_attributes = True
+
+#evidence-----------------------------------------
+class EvidenceCreate(BaseModel):
+    incident_id: int
+    evidence_type_id: int
+    evidence_location: str | None = None
+    evidence_imei: str | None = None
+    evidence_device: str | None = None
+    evidence_activation: str | None = None
+    description: str | None = None
+
+class EvidenceUpdate(BaseModel):
+    evidence_location: str | None = None
+    evidence_imei: str | None = None
+    evidence_device: str | None = None
+    evidence_activation: str | None = None
+    description: str | None = None
+
+class EvidenceResponse(BaseModel):
+    evidence_id: int
+    incident_id: int
+    user_id: int
+    evidence_type_id: int
+    file_name: str
+    evidence_location: str | None
+    evidence_imei: str | None
+    evidence_device: str | None
+    evidence_activation: str | None
+    file_path: str
+    file_hash: str
+    created_at: datetime
+    description: str | None
 
     class Config:
         from_attributes = True
