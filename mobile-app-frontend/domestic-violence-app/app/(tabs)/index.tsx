@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const captureActions = [
   {
     title: 'Voice\nNote',
-    icon: 'microphone-outline' as const,
+    icon: 'mic-outline' as const,
     color: '#4B86C5',
     backgroundColor: '#EEF4FC',
   },

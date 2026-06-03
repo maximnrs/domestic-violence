@@ -1,6 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { User, Settings, Bell, Star, Lock, Globe, Info, Heart, } from "lucide-react-native";
 
 import SettingsRow from "../../components/settingsrow";
 
@@ -22,7 +22,7 @@ export default function SettingsScreen() {
 
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <User size={22} color="#FFFFFF" />
+            <Ionicons name="person-outline" size={22} color="#FFFFFF" />
           </View>
 
           <View style={{ flex: 1 }}>
@@ -45,17 +45,17 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <SettingsRow
             label="General"
-            icon={<Settings size={18} color="#7FA89C" />}
+            icon={<Ionicons name="settings-outline" size={18} color="#7FA89C" />}
           />
 
           <SettingsRow
             label="Notifications"
-            icon={<Bell size={18} color="#5E8BBF" />}
+            icon={<Ionicons name="notifications-outline" size={18} color="#5E8BBF" />}
           />
 
           <SettingsRow
             label="Appearance"
-            icon={<Star size={18} color="#E0B663" />}
+            icon={<Ionicons name="star-outline" size={18} color="#E0B663" />}
           />
         </View>
 
@@ -68,12 +68,12 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <SettingsRow
             label="Privacy Settings"
-            icon={<Lock size={18} color="#9AA3A3" />}
+            icon={<Ionicons name="lock-closed-outline" size={18} color="#9AA3A3" />}
           />
 
           <SettingsRow
             label="Data & Storage"
-            icon={<Globe size={18} color="#9AA3A3" />}
+            icon={<Ionicons name="globe-outline" size={18} color="#9AA3A3" />}
           />
         </View>
 
@@ -87,12 +87,12 @@ export default function SettingsScreen() {
           <SettingsRow
             label="App Info"
             value="v1.0"
-            icon={<Info size={18} color="#9AA3A3" />}
+            icon={<Ionicons name="information-circle-outline" size={18} color="#9AA3A3" />}
           />
 
           <SettingsRow
             label="Help Center"
-            icon={<Heart size={18} color="#C9666B" />}
+            icon={<Ionicons name="heart-outline" size={18} color="#C9666B" />}
           />
         </View>
       </ScrollView>
