@@ -2,39 +2,64 @@ import { View, Text, Pressable } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { Colors } from "../constants/theme";
 
+interface SettingsRowProps {
+  icon: React.ReactNode;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+}
+
 export default function SettingsRow({
   icon,
   label,
   value,
   onPress,
-}: any) {
+}: SettingsRowProps) {
   return (
     <Pressable
       onPress={onPress}
       style={{
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderColor: Colors.border,
+        minHeight: 74,
+        paddingHorizontal: 16,
+        paddingVertical: 16,
       }}
     >
-      {icon}
+      {/* Icon Circle */}
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: "#EAF3F1",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        {icon}
+      </View>
 
+      {/* Label */}
       <Text
         style={{
           flex: 1,
-          marginLeft: 12,
-          color: Colors.text,
+          marginLeft: 14,
+          color: "#102120",
+          fontSize: 16,
+          fontFamily: "Manrope_700Bold",
         }}
       >
         {label}
       </Text>
 
+      {/* Optional Value */}
       {value && (
         <Text
           style={{
-            color: Colors.muted,
+            color: "#71807E",
+            fontSize: 14,
+            fontFamily: "Manrope_500Medium",
             marginRight: 8,
           }}
         >
@@ -43,8 +68,8 @@ export default function SettingsRow({
       )}
 
       <ChevronRight
-        size={16}
-        color={Colors.muted}
+        size={18}
+        color="#B5C0BE"
       />
     </Pressable>
   );
