@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { router, type Href } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -45,6 +46,12 @@ const recentMoments = [
 ];
 
 export default function HomeScreen() {
+  function handleCapturePress(title: string) {
+    if (title === 'Written\nNote') {
+      router.push('/written-note' as Href);
+    }
+  }
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -87,7 +94,11 @@ export default function HomeScreen() {
           <Text style={styles.sectionTitle}>QUICK CAPTURE</Text>
           <View style={styles.quickCaptureRow}>
             {captureActions.map((action) => (
-              <Pressable accessibilityRole="button" key={action.title} style={styles.captureCard}>
+              <Pressable
+                accessibilityRole="button"
+                key={action.title}
+                onPress={() => handleCapturePress(action.title)}
+                style={styles.captureCard}>
                 <View style={[styles.captureIcon, { backgroundColor: action.backgroundColor }]}>
                   {action.icon === 'file-document-outline' ? (
                     <MaterialCommunityIcons name={action.icon} size={22} color={action.color} />

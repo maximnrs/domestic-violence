@@ -44,11 +44,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="timeline"
+        name="case"
         options={{
-          title: 'Timeline',
+          title: 'Case',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'time' : 'time-outline'} size={25} color={color} />
+            <Ionicons name={focused ? 'folder' : 'folder-outline'} size={25} color={color} />
           ),
         }}
       />

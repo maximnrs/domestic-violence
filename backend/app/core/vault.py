@@ -40,6 +40,20 @@ async def retrieve_key(user_id: int, incident_id: int, file_id: str) -> bytes:
     except Exception as e:
         raise ValueError(f"Failed to retrieve key from OpenBao: {str(e)}")
 
+async def retrieve_key_by_reference(key_reference: str) -> bytes:
+    """
+    Retrieve an AES-256 key from OpenBao using a stored key reference path.
+    """
+    try:
+        secret = client.secrets.kv.v2.read_secret_version(
+            path=key_reference,
+            mount_point="Domestic"
+        )
+        key_base64 = secret['data']['data']['key']
+        return base64.b64decode(key_base64)
+    except Exception as e:
+        raise ValueError(f"Failed to retrieve key from OpenBao: {str(e)}")
+
 async def delete_key(user_id: int, incident_id: int, file_id: str):
     """
     Delete a key from OpenBao.
