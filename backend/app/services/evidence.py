@@ -86,12 +86,12 @@ async def download_evidence(
     # Step 1: Verify ownership
     evidence = await metadata.get_evidence(db, evidence_id, user_id)
     
-    # Step 2: Decrypt the file
+    # Step 2: Get encryption metadata and decrypt the file
+    encryption_metadata = await metadata.get_evidence_encryption(db, evidence_id)
     decrypted_bytes = await encryption.decrypt_file(
-        evidence_id,
         evidence.file_path,
-        evidence.encryption.aes_key_reference,
-        evidence.encryption.iv_nonce
+        encryption_metadata.aes_key_reference,
+        encryption_metadata.iv_nonce
     )
     
     # Step 3: Log the download

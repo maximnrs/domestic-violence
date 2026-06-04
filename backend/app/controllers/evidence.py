@@ -1,14 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.schemas import EvidenceCreate, EvidenceResponse
 from app.models.user import User
 from app.services import evidence as evidence_service
+from app.services import incident as incident_service
 from app.services.auth import get_current_user
 
 router = APIRouter(prefix="/evidence", tags=["Evidence"])
 
-@router.post("/", response_model=EvidenceResponse)
+@router.post(
+    "/",
+    response_model=EvidenceResponse,
+    responses={
+        400: {"description": "Evidence upload processing failed"},
+        404: {"description": "Incident not found or access denied"},
+    },
+)
 async def upload_evidence(
     incident_id: int = Form(...),
     evidence_type_id: int = Form(...),
@@ -21,6 +29,11 @@ async def upload_evidence(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    try:
+        await incident_service.get_incident(db, current_user.user_id, incident_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     try:
         # Read file bytes
         file_bytes = await file.read()
@@ -47,9 +60,13 @@ async def upload_evidence(
         )
         return evidence
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@router.get("/{evidence_id}", response_model=EvidenceResponse)
+@router.get(
+    "/{evidence_id}",
+    response_model=EvidenceResponse,
+    responses={404: {"description": "Evidence not found or access denied"}},
+)
 async def get_evidence(
     evidence_id: int,
     db: AsyncSession = Depends(get_db),
@@ -61,7 +78,11 @@ async def get_evidence(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/", response_model=list[EvidenceResponse])
+@router.get(
+    "/",
+    response_model=list[EvidenceResponse],
+    responses={404: {"description": "Incident evidence not found or access denied"}},
+)
 async def get_incident_evidence(
     incident_id: int,
     db: AsyncSession = Depends(get_db),
@@ -73,7 +94,10 @@ async def get_incident_evidence(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/{evidence_id}/download")
+@router.get(
+    "/{evidence_id}/download",
+    responses={404: {"description": "Evidence not found, access denied, or decrypt unavailable"}},
+)
 async def download_evidence(
     evidence_id: int,
     db: AsyncSession = Depends(get_db),
