@@ -170,6 +170,10 @@ export function register(payload: RegisterRequest) {
   });
 }
 
+export function getCurrentUser() {
+  return apiRequest<UserResponse>('/auth/me');
+}
+
 export function getCases() {
   return apiRequest<CaseResponse[]>('/cases/');
 }

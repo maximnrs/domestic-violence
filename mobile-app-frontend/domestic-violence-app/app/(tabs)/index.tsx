@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { getCurrentUser } from '../../services/api'; // adjust path if needed
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react';
 
 const captureActions = [
   {
@@ -46,6 +48,22 @@ const recentMoments = [
 ];
 
 export default function HomeScreen() {
+
+    const [firstName, setFirstName] = useState('');
+
+    useEffect(() => {
+    async function loadUser() {
+      try {
+        const user = await getCurrentUser();
+        setFirstName(user.first_name);
+      } catch (error) {
+        console.error('Failed to load user:', error);
+      }
+    }
+
+    loadUser();
+  }, []);
+
   function handleCapturePress(title: string) {
     if (title === 'Written\nNote') {
       router.push('/written-note' as Href);
@@ -73,7 +91,7 @@ export default function HomeScreen() {
 
             <View style={styles.greetingBlock}>
               <Text style={styles.eyebrow}>Good evening</Text>
-              <Text style={styles.userName}>Sarah</Text>
+              <Text style={styles.userName}>{firstName || 'Welcome'}</Text>
               <Text style={styles.safetyText}>Thursday, May 21 · You are safe right now</Text>
             </View>
 
