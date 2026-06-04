@@ -25,7 +25,7 @@ const captureActions = [
     backgroundColor: '#EEF2F2',
   },
 ];
-
+//todo - add real data and navigation for recent moments
 const recentMoments = [
   {
     title: 'Verbal incident documented',
@@ -85,6 +85,24 @@ export default function HomeScreen() {
     }
   }
 
+  // Returns a greeting based on local time: morning / afternoon / evening
+  function getTimeOfDay(date = new Date()) {
+    const hour = date.getHours();
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  // Returns formatted date like "Thursday, May 21"
+  function getFormattedDate(date = new Date()) {
+    const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return `${weekdays[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+  }
+
   function openBloomDisguise() {
     router.push('/bloom' as Href);
   }
@@ -128,9 +146,9 @@ export default function HomeScreen() {
             ) : null}
 
             <View style={styles.greetingBlock}>
-              <Text style={styles.eyebrow}>Good evening</Text>
+              <Text style={styles.eyebrow}>{getTimeOfDay()}</Text>
               <Text style={styles.userName}>{firstName || 'Welcome'}</Text>
-              <Text style={styles.safetyText}>Thursday, May 21 · You are safe right now</Text>
+              <Text style={styles.safetyText}>{`${getFormattedDate()} · You are safe right now`}</Text>
             </View>
 
             <Pressable accessibilityRole="button" style={styles.recordCard}>

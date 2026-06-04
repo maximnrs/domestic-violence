@@ -1,10 +1,31 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import SettingsRow from "../../components/settingsrow";
+import { getCurrentUser } from "../../services/api";
 
 export default function SettingsScreen() {
+  const [profileName, setProfileName] = useState("Loading...");
+  const [profileEmail, setProfileEmail] = useState("");
+
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const user = await getCurrentUser();
+        setProfileName(`${user.first_name} ${user.last_name}`.trim());
+        setProfileEmail(user.email);
+      } catch (error) {
+        console.error("Failed to load user:", error);
+        setProfileName("Profile unavailable");
+        setProfileEmail("");
+      }
+    }
+
+    loadUser();
+  }, []);
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView
@@ -27,12 +48,14 @@ export default function SettingsScreen() {
 
           <View style={{ flex: 1 }}>
             <Text style={styles.profileName}>
-              Sarah M.
+              {profileName}
             </Text>
 
-            <Text style={styles.profileEmail}>
-              sarah@email.com
-            </Text>
+            {profileEmail ? (
+              <Text style={styles.profileEmail}>
+                {profileEmail}
+              </Text>
+            ) : null}
           </View>
         </View>
 
