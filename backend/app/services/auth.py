@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User
+from app.models.case import Case
 from app.models.schemas import UserCreate
 from passlib.context import CryptContext
 from jose import jwt, JWTError
@@ -43,6 +44,15 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
         phone_number=data.phone_number,
     )
     db.add(user)
+    await db.flush()
+    db.add(
+        Case(
+            user_id=user.user_id,
+            case_title="My Case",
+            description=None,
+            status="open",
+        )
+    )
     await db.commit()
     await db.refresh(user)
     return user

@@ -1,6 +1,5 @@
 import { View, Text, Pressable } from "react-native";
-import { ChevronRight } from "lucide-react-native";
-import { Colors } from "../constants/theme";
+import { Ionicons } from "@expo/vector-icons";
 
 interface SettingsRowProps {
   icon: React.ReactNode;
@@ -67,10 +66,7 @@ export default function SettingsRow({
         </Text>
       )}
 
-      <ChevronRight
-        size={18}
-        color="#B5C0BE"
-      />
+      <Ionicons name="chevron-forward" size={18} color="#B5C0BE" />
     </Pressable>
   );
 }
