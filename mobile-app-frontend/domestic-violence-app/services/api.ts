@@ -170,16 +170,25 @@ export function register(payload: RegisterRequest) {
   });
 }
 
-export function getMyCase() {
-  return apiRequest<CaseResponse>('/cases/me');
+export function getCurrentUser() {
+  return apiRequest<UserResponse>('/auth/me');
+}
+
+export function getCases() {
+  return apiRequest<CaseResponse[]>('/cases/');
 }
 
 export function listIncidents(caseId: number) {
-  return apiRequest<IncidentResponse[]>(`/incidents/?case_id=${caseId}`);
+  console.log("Loading incidents for case", caseId);
+ 
+  return apiRequest<IncidentResponse[]>(
+    `/incidents/?case_id=${caseId}`
+  );
 }
 
 export function getIncident(incidentId: number) {
   return apiRequest<IncidentResponse>(`/incidents/${incidentId}`);
+
 }
 
 export function createIncident(payload: IncidentCreateRequest) {

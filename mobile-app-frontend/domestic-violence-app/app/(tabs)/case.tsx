@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  getMyCase,
+  getCases,
   listIncidents,
   type CaseResponse,
   type IncidentResponse,
@@ -86,11 +86,22 @@ export default function CaseScreen() {
     setIncidents([]);
 
     try {
-      const currentCase = await getMyCase();
+      const cases = await getCases();
+    
+      console.log('Retrieved cases:', cases);
+
+      if (cases.length === 0) {
+        setCaseInfo(null);
+        setIsCaseLoading(false);
+        return;
+      }
+    
+      const currentCase = cases[0];
+    
       setCaseInfo(currentCase);
       setIsCaseLoading(false);
       setIsIncidentLoading(true);
-
+    
       try {
         const nextIncidents = await listIncidents(currentCase.case_id);
         setIncidents(nextIncidents);
@@ -102,7 +113,11 @@ export default function CaseScreen() {
         setIsIncidentLoading(false);
       }
     } catch (error) {
-      setCaseError(error instanceof Error ? error.message : 'Unable to load your case.');
+      setCaseError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load your case.'
+      );
       setIsCaseLoading(false);
     }
   }, []);

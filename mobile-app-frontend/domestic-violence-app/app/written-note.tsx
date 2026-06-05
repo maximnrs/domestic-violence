@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   createIncident,
   getEvidenceTypes,
-  getMyCase,
+  getCases,
   listIncidents,
   uploadEvidence,
   type CaseResponse,
@@ -145,7 +145,7 @@ export default function WrittenNoteScreen() {
     setIncidents([]);
     setSelectedIncidentId(null);
 
-    const [caseResult, typeResult] = await Promise.allSettled([getMyCase(), getEvidenceTypes()]);
+    const [caseResult, typeResult] = await Promise.allSettled([getCases(), getEvidenceTypes()]);
 
     if (typeResult.status === 'fulfilled') {
       setEvidenceTypes(typeResult.value);
@@ -166,7 +166,7 @@ export default function WrittenNoteScreen() {
       return;
     }
 
-    const currentCase = caseResult.value;
+    const currentCase = caseResult.value[0];
     setCaseInfo(currentCase);
     setIsContextLoading(false);
     setIsIncidentLoading(true);

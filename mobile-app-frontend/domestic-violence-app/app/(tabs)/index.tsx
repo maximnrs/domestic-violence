@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { getCurrentUser } from '../../services/api'; // adjust path if needed
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react';
 
 const captureActions = [
   {
@@ -23,7 +25,7 @@ const captureActions = [
     backgroundColor: '#EEF2F2',
   },
 ];
-
+//todo - add real data and navigation for recent moments
 const recentMoments = [
   {
     title: 'Verbal incident documented',
@@ -46,10 +48,63 @@ const recentMoments = [
 ];
 
 export default function HomeScreen() {
+
+    const [firstName, setFirstName] = useState('');
+    const [showWelcomeToast, setShowWelcomeToast] = useState(false);
+    const { welcomeBack } = useLocalSearchParams<{ welcomeBack?: string }>();
+
+    useEffect(() => {
+    async function loadUser() {
+      try {
+        const user = await getCurrentUser();
+        setFirstName(user.first_name);
+      } catch (error) {
+        console.error('Failed to load user:', error);
+      }
+    }
+
+    loadUser();
+  }, []);
+
+  useEffect(() => {
+    if (welcomeBack !== '1') {
+      return;
+    }
+
+    setShowWelcomeToast(true);
+    const timeout = setTimeout(() => {
+      setShowWelcomeToast(false);
+    }, 3600);
+
+    return () => clearTimeout(timeout);
+  }, [welcomeBack]);
+
   function handleCapturePress(title: string) {
     if (title === 'Written\nNote') {
       router.push('/written-note' as Href);
     }
+  }
+
+  // Returns a greeting based on local time: morning / afternoon / evening
+  function getTimeOfDay(date = new Date()) {
+    const hour = date.getHours();
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  // Returns formatted date like "Thursday, May 21"
+  function getFormattedDate(date = new Date()) {
+    const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return `${weekdays[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+  }
+
+  function openBloomDisguise() {
+    router.push('/bloom' as Href);
   }
 
   return (
@@ -71,10 +126,29 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
+            {showWelcomeToast ? (
+              <View accessibilityLiveRegion="polite" style={styles.welcomeToast}>
+                <View style={styles.toastIcon}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color="#FFFFFF" />
+                </View>
+                <View style={styles.toastTextBlock}>
+                  <Text style={styles.toastTitle}>Welcome back to Nura</Text>
+                  <Text style={styles.toastSubtitle}>Your safety. Your evidence. Your control.</Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Dismiss welcome message"
+                  accessibilityRole="button"
+                  onPress={() => setShowWelcomeToast(false)}
+                  style={styles.toastClose}>
+                  <Ionicons name="close" size={18} color="#B9D9D4" />
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.greetingBlock}>
-              <Text style={styles.eyebrow}>Good evening</Text>
-              <Text style={styles.userName}>Sarah</Text>
-              <Text style={styles.safetyText}>Thursday, May 21 · You are safe right now</Text>
+              <Text style={styles.eyebrow}>{getTimeOfDay()}</Text>
+              <Text style={styles.userName}>{firstName || 'Welcome'}</Text>
+              <Text style={styles.safetyText}>{`${getFormattedDate()} · You are safe right now`}</Text>
             </View>
 
             <Pressable accessibilityRole="button" style={styles.recordCard}>
@@ -134,7 +208,11 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      <Pressable accessibilityRole="button" style={styles.floatingAction}>
+      <Pressable
+        accessibilityLabel="Open Bloom interface"
+        accessibilityRole="button"
+        onPress={openBloomDisguise}
+        style={styles.floatingAction}>
         <MaterialCommunityIcons name="pulse" size={32} color="#FFFFFF" />
       </Pressable>
     </View>
@@ -190,6 +268,45 @@ const styles = StyleSheet.create({
     right: 10,
     top: 9,
     width: 6,
+  },
+  welcomeToast: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(25, 78, 76, 0.92)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    marginTop: 10,
+    minHeight: 64,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  toastIcon: {
+    alignItems: 'center',
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  toastTextBlock: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  toastTitle: {
+    color: '#FFFFFF',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 14,
+  },
+  toastSubtitle: {
+    color: '#B8E1DB',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  toastClose: {
+    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
   },
   greetingBlock: {
     marginTop: 22,
