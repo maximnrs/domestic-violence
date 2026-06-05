@@ -1,6 +1,8 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { User, Settings, Bell, Star, Lock, Globe, Info, Heart, } from "lucide-react-native";
+import { router } from "expo-router";
+import { Colors } from "../../constants/theme";
 
 import SettingsRow from "../../components/settingsrow";
 
@@ -55,7 +57,8 @@ export default function SettingsScreen() {
 
           <SettingsRow
             label="Appearance"
-            icon={<Star size={18} color="#E0B663" />}
+            icon={<Star size={18} color={Colors.warning} />}
+            onPress={() => router.push("/appearance")}
           />
         </View>
 
