@@ -85,7 +85,7 @@ export default function AppearanceScreen() {
       </Text>
 
       <Text style={styles.description}>
-        Choose how Bloom appears on your
+        Choose how the app appears on your
         device. This preview simulates the
         selected icon.
       </Text>
