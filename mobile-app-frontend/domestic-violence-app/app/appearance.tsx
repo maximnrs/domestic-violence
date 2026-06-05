@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { View, Text, ScrollView, Pressable, StyleSheet, } from "react-native";
+import { router } from "expo-router";
 
-import { Activity, BookOpen, Coffee, Dumbbell, Check, } from "lucide-react-native";
+import { Activity, BookOpen, Coffee, Dumbbell, Check, ArrowLeft } from "lucide-react-native";
 
 const iconOptions = [
   {
@@ -39,6 +40,42 @@ export default function AppearanceScreen() {
       style={styles.screen}
       contentContainerStyle={styles.content}
     >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 20,
+        }}
+      >
+        <Pressable
+          onPress={() => router.back()}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "#FFFFFF",
+            borderWidth: 1,
+            borderColor: "#E7ECEA",
+            marginRight: 12,
+          }}
+        >
+          <ArrowLeft
+            size={20}
+            color="#102120"
+          />
+        </Pressable>
+
+        <Text
+          style={{
+            fontSize: 30,
+            color: "#102120",
+            fontFamily: "Manrope_800ExtraBold",
+          }}
+        >
+        </Text>
+      </View>
       <Text style={styles.title}>
         Appearance
       </Text>
