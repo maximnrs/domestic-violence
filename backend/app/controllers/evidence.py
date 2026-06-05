@@ -6,6 +6,9 @@ from app.models.user import User
 from app.services import evidence as evidence_service
 from app.services.auth import get_current_user
 
+from sqlalchemy import select
+from app.models.evidencetype import EvidenceType
+
 router = APIRouter(prefix="/evidence", tags=["Evidence"])
 
 @router.post("/", response_model=EvidenceResponse)
@@ -88,3 +91,11 @@ async def download_evidence(
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/types/")
+async def get_evidence_types(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(EvidenceType))
+    return result.scalars().all()
