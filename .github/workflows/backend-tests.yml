@@ -38,3 +38,23 @@ jobs:
 
       - name: Run tests
         run: python -m pytest tests -v
+
+      - name: Start integration services
+        run: docker compose -f ../docker-compose.integration.yml up -d --wait
+
+      - name: Run Docker-backed integration tests
+        env:
+          RUN_INTEGRATION_TESTS: "1"
+          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5433/domestic_violence_test
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: test-access-key
+          MINIO_SECRET_KEY: test-secret-key
+          MINIO_BUCKET: evidence-test
+          VAULT_URL: http://localhost:8200
+          VAULT_TOKEN: test-token
+          SECRET_KEY: integration-test-secret
+        run: python -m pytest tests/integration -v
+
+      - name: Stop integration services
+        if: always()
+        run: docker compose -f ../docker-compose.integration.yml down -v
