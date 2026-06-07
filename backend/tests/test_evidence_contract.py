@@ -42,6 +42,39 @@ class FakeUploadFile:
         return self.content
 
 
+class InMemoryKeyStore:
+    def __init__(self):
+        self.keys = {}
+
+    async def store_key(self, user_id, incident_id, file_id, key_bytes):
+        key_reference = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
+        self.keys[key_reference] = key_bytes
+        return key_reference
+
+    async def retrieve_key_by_reference(self, key_reference):
+        return self.keys[key_reference]
+
+
+class InMemoryObjectStorage:
+    def __init__(self):
+        self.files = {}
+
+    async def upload_file(self, file_key, file_bytes):
+        self.files[file_key] = file_bytes
+        return file_key
+
+    async def download_file(self, file_key):
+        return self.files[file_key]
+
+
+class RecordingAuditLogger:
+    def __init__(self):
+        self.actions = []
+
+    async def log_action(self, *args, **kwargs):
+        self.actions.append((args, kwargs))
+
+
 def test_evidence_type_lookup_requires_authentication():
     app = FastAPI()
     app.include_router(evidencetype_controller.router)
@@ -168,37 +201,27 @@ def test_user_can_upload_to_authorized_incident(monkeypatch):
     not cryptography_available(),
     reason="cryptography backend is unavailable in this environment",
 )
-def test_encrypt_decrypt_round_trip_for_utf8_text(monkeypatch):
-    stored = {}
-
-    async def fake_store_key(user_id, incident_id, file_id, key_bytes):
-        stored["key"] = key_bytes
-        return f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
-
-    async def fake_retrieve_key_by_reference(key_reference):
-        return stored["key"]
-
-    async def fake_upload_file(file_key, file_bytes):
-        stored["file_key"] = file_key
-        stored["file_bytes"] = file_bytes
-        return file_key
-
-    async def fake_download_file(file_key):
-        assert file_key == stored["file_key"]
-        return stored["file_bytes"]
-
-    monkeypatch.setattr(encryption_service.vault, "store_key", fake_store_key)
-    monkeypatch.setattr(encryption_service.vault, "retrieve_key_by_reference", fake_retrieve_key_by_reference)
-    monkeypatch.setattr(encryption_service.storage, "upload_file", fake_upload_file)
-    monkeypatch.setattr(encryption_service.storage, "download_file", fake_download_file)
+def test_encrypt_decrypt_round_trip_for_utf8_text():
+    key_store = InMemoryKeyStore()
+    object_storage = InMemoryObjectStorage()
 
     original = "A written note with UTF-8: veilig".encode("utf-8")
-    encryption_data = asyncio.run(encryption_service.encrypt_file(1, 2, original))
+    encryption_data = asyncio.run(
+        encryption_service.encrypt_file(
+            1,
+            2,
+            original,
+            key_store=key_store,
+            object_storage=object_storage,
+        )
+    )
     decrypted = asyncio.run(
         encryption_service.decrypt_file(
             encryption_data["file_path"],
             encryption_data["key_reference"],
             encryption_data["iv_nonce"],
+            key_store=key_store,
+            object_storage=object_storage,
         )
     )
 
@@ -209,54 +232,63 @@ def test_encrypt_decrypt_round_trip_for_utf8_text(monkeypatch):
     not cryptography_available(),
     reason="cryptography backend is unavailable in this environment",
 )
-def test_encrypt_decrypt_round_trip_for_binary_file(monkeypatch):
-    stored = {}
-
-    async def fake_store_key(user_id, incident_id, file_id, key_bytes):
-        stored["key"] = key_bytes
-        return f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
-
-    async def fake_retrieve_key_by_reference(key_reference):
-        return stored["key"]
-
-    async def fake_upload_file(file_key, file_bytes):
-        stored["file_key"] = file_key
-        stored["file_bytes"] = file_bytes
-        return file_key
-
-    async def fake_download_file(file_key):
-        assert file_key == stored["file_key"]
-        return stored["file_bytes"]
-
-    monkeypatch.setattr(encryption_service.vault, "store_key", fake_store_key)
-    monkeypatch.setattr(encryption_service.vault, "retrieve_key_by_reference", fake_retrieve_key_by_reference)
-    monkeypatch.setattr(encryption_service.storage, "upload_file", fake_upload_file)
-    monkeypatch.setattr(encryption_service.storage, "download_file", fake_download_file)
+def test_encrypt_decrypt_round_trip_for_binary_file():
+    key_store = InMemoryKeyStore()
+    object_storage = InMemoryObjectStorage()
 
     original = bytes([0, 1, 2, 3, 127, 128, 255])
-    encryption_data = asyncio.run(encryption_service.encrypt_file(1, 2, original))
+    encryption_data = asyncio.run(
+        encryption_service.encrypt_file(
+            1,
+            2,
+            original,
+            key_store=key_store,
+            object_storage=object_storage,
+        )
+    )
     decrypted = asyncio.run(
         encryption_service.decrypt_file(
             encryption_data["file_path"],
             encryption_data["key_reference"],
             encryption_data["iv_nonce"],
+            key_store=key_store,
+            object_storage=object_storage,
         )
     )
 
     assert decrypted == original
 
 
-def test_download_evidence_rejects_unauthorized_access(monkeypatch):
-    decrypt_mock = AsyncMock()
-    monkeypatch.setattr(
-        evidence_service.metadata,
-        "get_evidence",
-        AsyncMock(side_effect=ValueError("Evidence not found or access denied")),
-    )
-    monkeypatch.setattr(evidence_service.encryption, "decrypt_file", decrypt_mock)
+def test_download_evidence_rejects_unauthorized_access():
+    class RejectingMetadataRepository:
+        async def get_evidence(self, db, evidence_id, user_id):
+            raise ValueError("Evidence not found or access denied")
+
+        async def get_evidence_encryption(self, db, evidence_id):
+            raise AssertionError("Encryption metadata should not be loaded")
+
+    class RecordingEncryptionService:
+        def __init__(self):
+            self.decrypt_called = False
+
+        async def encrypt_file(self, user_id, incident_id, file_bytes):
+            raise NotImplementedError
+
+        async def decrypt_file(self, file_path, key_reference, iv_nonce):
+            self.decrypt_called = True
+            return b""
+
+    encryption_fake = RecordingEncryptionService()
 
     async def call_download():
-        await evidence_service.download_evidence(object(), user_id=5, evidence_id=10)
+        await evidence_service.download_evidence(
+            object(),
+            user_id=5,
+            evidence_id=10,
+            encryption_service=encryption_fake,
+            metadata_repository=RejectingMetadataRepository(),
+            audit_logger=RecordingAuditLogger(),
+        )
 
     try:
         asyncio.run(call_download())
@@ -265,39 +297,49 @@ def test_download_evidence_rejects_unauthorized_access(monkeypatch):
     else:
         raise AssertionError("Expected unauthorized download to be rejected")
 
-    decrypt_mock.assert_not_called()
+    assert encryption_fake.decrypt_called is False
 
 
-def test_download_evidence_returns_decrypted_bytes(monkeypatch):
+def test_download_evidence_returns_decrypted_bytes():
     expected = b"original note"
-    monkeypatch.setattr(
-        evidence_service.metadata,
-        "get_evidence",
-        AsyncMock(
-            return_value=SimpleNamespace(
+
+    class DownloadMetadataRepository:
+        async def get_evidence(self, db, evidence_id, user_id):
+            return SimpleNamespace(
                 evidence_id=10,
                 incident_id=3,
                 file_path="evidence/user_1/incident_3/file.bin",
                 file_name="note.txt",
             )
-        ),
-    )
-    monkeypatch.setattr(
-        evidence_service.metadata,
-        "get_evidence_encryption",
-        AsyncMock(
-            return_value=SimpleNamespace(
+
+        async def get_evidence_encryption(self, db, evidence_id):
+            return SimpleNamespace(
                 aes_key_reference="evidence/user_1/incident_3/file",
                 iv_nonce="nonce",
             )
-        ),
-    )
-    monkeypatch.setattr(evidence_service.encryption, "decrypt_file", AsyncMock(return_value=expected))
-    monkeypatch.setattr(evidence_service.auditlog, "log_action", AsyncMock())
 
-    result = asyncio.run(evidence_service.download_evidence(object(), user_id=1, evidence_id=10))
+    class DecryptingEncryptionService:
+        async def encrypt_file(self, user_id, incident_id, file_bytes):
+            raise NotImplementedError
+
+        async def decrypt_file(self, file_path, key_reference, iv_nonce):
+            return expected
+
+    audit_logger = RecordingAuditLogger()
+
+    result = asyncio.run(
+        evidence_service.download_evidence(
+            object(),
+            user_id=1,
+            evidence_id=10,
+            encryption_service=DecryptingEncryptionService(),
+            metadata_repository=DownloadMetadataRepository(),
+            audit_logger=audit_logger,
+        )
+    )
 
     assert result == expected
+    assert len(audit_logger.actions) == 1
 
 
 def test_evidence_create_schema_has_no_file_body_field():
