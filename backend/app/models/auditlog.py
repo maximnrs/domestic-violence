@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, DateTime, Integer, ForeignKey, Text
+from sqlalchemy import String, DateTime, Integer, ForeignKey, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -15,6 +15,6 @@ class AuditLog(Base):
     action_type: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    action_timestamp: Mapped[datetime] = mapped_column(DateTime, server_default="CURRENT_TIMESTAMP")
+    action_timestamp: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)

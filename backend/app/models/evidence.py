@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, DateTime, Integer, ForeignKey, Text
+from sqlalchemy import String, DateTime, Integer, ForeignKey, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -17,7 +17,7 @@ class Evidence(Base):
     evidence_activation: Mapped[str | None] = mapped_column(String(50), nullable=True)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)  # path in MinIO
     file_hash: Mapped[str] = mapped_column(String(500), nullable=False)  # HMAC-SHA-256
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default="CURRENT_TIMESTAMP")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 # encryption: Mapped["Encryption"] = relationship("Encryption", uselist=False, back_populates="evidence")
