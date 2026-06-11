@@ -1,7 +1,7 @@
 version: "3.9"
 
-# All credentials and addresses live in .env — no extra flags needed.
-# PostgreSQL, MinIO, and Vault run externally (see .env for IPs).
+# Connects to the existing Nura API infrastructure (PostgreSQL, MinIO, Vault).
+# All addresses live in .env — no extra flags needed.
 
 services:
 
@@ -19,9 +19,8 @@ services:
       VAULT_URL: ${VAULT_URL}
       VAULT_TOKEN: ${VAULT_TOKEN}
       VAULT_SKIP_VERIFY: ${VAULT_SKIP_VERIFY:-false}
-      HMAC_SECRET_PATH: ${HMAC_SECRET_PATH}
     ports:
-      - "8000:8000"
+      - "8001:8000"   # 8001 on host to avoid conflict with the main API-Server on 8000
     networks:
       - integrity
 
@@ -39,7 +38,6 @@ services:
       VAULT_URL: ${VAULT_URL}
       VAULT_TOKEN: ${VAULT_TOKEN}
       VAULT_SKIP_VERIFY: ${VAULT_SKIP_VERIFY:-false}
-      HMAC_SECRET_PATH: ${HMAC_SECRET_PATH}
       CHECK_INTERVAL_SECONDS: ${CHECK_INTERVAL_SECONDS:-60}
     networks:
       - integrity

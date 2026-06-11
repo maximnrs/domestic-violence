@@ -1,15 +1,16 @@
 import os
 import hmac
 import hashlib
-import hvac
+import base64
 import psycopg2
+import hvac
 from minio import Minio
 from config import settings as config
 
 
 # ── Vault ─────────────────────────────────────────────────────────────────────
 
-def get_openbao_client() -> hvac.Client:
+def get_vault_client() -> hvac.Client:
     return hvac.Client(
         url=config.VAULT_URL,
         token=config.VAULT_TOKEN,
@@ -17,24 +18,19 @@ def get_openbao_client() -> hvac.Client:
     )
 
 
-def get_hmac_key(client: hvac.Client) -> bytes:
-    """Retrieve HMAC secret key from Vault. Creates one only on a genuine first run."""
-    try:
-        secret = client.secrets.kv.v2.read_secret_version(path=config.HMAC_SECRET_PATH)
-        return bytes.fromhex(secret["data"]["data"]["key"])
-    except hvac.exceptions.InvalidPath:
-        # Secret genuinely does not exist yet — generate and store it once.
-        key = os.urandom(32)
-        client.secrets.kv.v2.create_or_update_secret(
-            path=config.HMAC_SECRET_PATH,
-            secret={"key": key.hex()},
+def get_hmac_key(client: hvac.Client, vault_path: str) -> bytes:
+    """Retrieve per-file HMAC key from Vault (Domestic mount)."""
+    secret = client.secrets.kv.v2.read_secret_version(
+        path=vault_path, mount_point="Domestic"
+    )
+    data = secret["data"]["data"]
+    if "hmac_key" not in data:
+        raise KeyError(
+            "hmac_key not in Vault secret — file was uploaded before "
+            "the fix was applied. See api-server-fix/."
         )
-        return key
-    # All other exceptions (network error, bad token, permission denied) propagate
-    # so callers can log and retry instead of silently overwriting the real key.
+    return base64.b64decode(data["hmac_key"])
 
-
-# ── HMAC ─────────────────────────────────────────────────────────────────────
 
 def compute_hmac(data: bytes, key: bytes) -> str:
     return hmac.new(key, data, hashlib.sha256).hexdigest()
@@ -43,27 +39,14 @@ def compute_hmac(data: bytes, key: bytes) -> str:
 # ── MinIO ─────────────────────────────────────────────────────────────────────
 
 def get_minio_client() -> Minio:
-    return Minio(
-        endpoint=config.MINIO_ENDPOINT,
-        access_key=config.MINIO_ACCESS_KEY,
-        secret_key=config.MINIO_SECRET_KEY,
-        secure=False,
-    )
+    endpoint = config.MINIO_ENDPOINT.replace("https://", "").replace("http://", "")
+    secure = config.MINIO_ENDPOINT.startswith("https://")
+    return Minio(endpoint=endpoint, access_key=config.MINIO_ACCESS_KEY,
+                 secret_key=config.MINIO_SECRET_KEY, secure=secure)
 
 
-def ensure_bucket(client: Minio, bucket: str) -> None:
-    if not client.bucket_exists(bucket):
-        client.make_bucket(bucket)
-
-
-def upload_file(client: Minio, bucket: str, object_key: str, data: bytes) -> None:
-    import io
-    ensure_bucket(client, bucket)
-    client.put_object(bucket, object_key, io.BytesIO(data), length=len(data))
-
-
-def download_file(client: Minio, bucket: str, object_key: str) -> bytes:
-    response = client.get_object(bucket, object_key)
+def download_file(client: Minio, file_path: str) -> bytes:
+    response = client.get_object(config.MINIO_BUCKET, file_path)
     try:
         return response.read()
     finally:
@@ -77,88 +60,115 @@ def get_db_connection():
     return psycopg2.connect(config.DATABASE_URL)
 
 
-def save_file_record(
-    conn,
-    filename: str,
-    object_key: str,
-    hmac_hash: str,
-    status: str = "pending",
-) -> int:
+def ensure_integrity_log_table(conn):
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO evidence_files (filename, object_key, hmac_hash, status)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (object_key) DO UPDATE
-              SET hmac_hash = EXCLUDED.hmac_hash, status = EXCLUDED.status
-            RETURNING id
-            """,
-            (filename, object_key, hmac_hash, status),
-        )
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS integrity_check_log (
+                id            SERIAL PRIMARY KEY,
+                evidence_id   INTEGER NOT NULL,
+                result        VARCHAR(20) NOT NULL,
+                stored_hash   TEXT,
+                computed_hash TEXT,
+                message       TEXT,
+                checked_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+
+
+def get_all_evidence(conn) -> list[dict]:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                e.evidence_id,
+                e.file_name,
+                e.file_path,
+                e.incident_id,
+                e.created_at,
+                enc.crypto_id,
+                enc.hmac_hash,
+                enc.aes_key_reference,
+                enc.integrity_status,
+                enc.hmac_verified_at
+            FROM   evidence e
+            JOIN   encryption enc ON e.evidence_id = enc.evidence_id
+            ORDER  BY e.created_at DESC
+        """)
+        cols = [d[0] for d in cur.description]
+        rows = []
+        for row in cur.fetchall():
+            r = dict(zip(cols, row))
+            if r.get("created_at"):
+                r["created_at"] = r["created_at"].isoformat()
+            if r.get("hmac_verified_at"):
+                r["hmac_verified_at"] = r["hmac_verified_at"].isoformat()
+            rows.append(r)
+        return rows
+
+
+def get_evidence_by_id(conn, evidence_id: int) -> dict | None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                e.evidence_id,
+                e.file_name,
+                e.file_path,
+                e.incident_id,
+                e.created_at,
+                enc.crypto_id,
+                enc.hmac_hash,
+                enc.aes_key_reference,
+                enc.integrity_status,
+                enc.hmac_verified_at
+            FROM   evidence e
+            JOIN   encryption enc ON e.evidence_id = enc.evidence_id
+            WHERE  e.evidence_id = %s
+        """, (evidence_id,))
+        cols = [d[0] for d in cur.description]
         row = cur.fetchone()
-        conn.commit()
-        return row[0]
+        if not row:
+            return None
+        r = dict(zip(cols, row))
+        if r.get("created_at"):
+            r["created_at"] = r["created_at"].isoformat()
+        if r.get("hmac_verified_at"):
+            r["hmac_verified_at"] = r["hmac_verified_at"].isoformat()
+        return r
 
 
-def get_all_file_records(conn) -> list[dict]:
+def update_encryption_status(conn, crypto_id: int, status: str):
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, filename, object_key, hmac_hash, uploaded_at, status"
-            " FROM evidence_files"
-        )
-        cols = [desc[0] for desc in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
-
-
-def get_file_record(conn, object_key: str) -> dict | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, filename, object_key, hmac_hash, uploaded_at, status"
-            " FROM evidence_files WHERE object_key = %s",
-            (object_key,),
-        )
-        cols = [desc[0] for desc in cur.description]
-        row = cur.fetchone()
-        return dict(zip(cols, row)) if row else None
-
-
-def update_file_status(conn, object_key: str, status: str) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE evidence_files SET status = %s WHERE object_key = %s",
-            (status, object_key),
+            "UPDATE encryption SET integrity_status=%s, hmac_verified_at=NOW() WHERE crypto_id=%s",
+            (status, crypto_id),
         )
         conn.commit()
 
 
-def write_audit_log(
-    conn,
-    object_key: str,
-    result: str,
-    stored_hash: str,
-    computed_hash: str,
-    message: str,
-) -> None:
+def write_integrity_log(conn, evidence_id, result, stored_hash, computed_hash, message):
     with conn.cursor() as cur:
         cur.execute(
-            """
-            INSERT INTO audit_logs (object_key, result, stored_hash, computed_hash, message)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (object_key, result, stored_hash, computed_hash, message),
+            "INSERT INTO integrity_check_log (evidence_id,result,stored_hash,computed_hash,message)"
+            " VALUES (%s,%s,%s,%s,%s)",
+            (evidence_id, result, stored_hash, computed_hash, message),
         )
         conn.commit()
 
 
-def get_audit_logs(conn, object_key: str = None) -> list[dict]:
+def get_integrity_logs(conn, evidence_id: int = None) -> list[dict]:
     with conn.cursor() as cur:
-        if object_key is not None:
+        if evidence_id is not None:
             cur.execute(
-                "SELECT * FROM audit_logs WHERE object_key = %s"
-                " ORDER BY check_time DESC",
-                (object_key,),
+                "SELECT * FROM integrity_check_log WHERE evidence_id=%s ORDER BY checked_at DESC",
+                (evidence_id,),
             )
         else:
-            cur.execute("SELECT * FROM audit_logs ORDER BY check_time DESC")
-        cols = [desc[0] for desc in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+            cur.execute("SELECT * FROM integrity_check_log ORDER BY checked_at DESC LIMIT 200")
+        cols = [d[0] for d in cur.description]
+        rows = []
+        for row in cur.fetchall():
+            r = dict(zip(cols, row))
+            if r.get("checked_at"):
+                r["checked_at"] = r["checked_at"].isoformat()
+            rows.append(r)
+        return rows

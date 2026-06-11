@@ -1,36 +1,27 @@
-import os
-import re
-import uuid
 from pathlib import Path
-from datetime import datetime, timezone
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
 from utils import (
-    get_openbao_client,
+    get_vault_client,
     get_hmac_key,
     compute_hmac,
     get_minio_client,
-    upload_file,
     download_file,
     get_db_connection,
-    save_file_record,
-    get_all_file_records,
-    get_file_record,
-    write_audit_log,
-    get_audit_logs,
-    update_file_status,
+    ensure_integrity_log_table,
+    get_all_evidence,
+    get_evidence_by_id,
+    update_encryption_status,
+    write_integrity_log,
+    get_integrity_logs,
 )
 
 app = FastAPI(
-    title="Evidence Integrity System — API",
-    description=(
-        "Upload digital evidence. Files are stored in MinIO, fingerprinted with"
-        " HMAC-SHA-256, and verified by the Integrity Checker."
-    ),
-    version="1.0.0",
+    title="Evidence Integrity Monitor",
+    description="Monitors HMAC-SHA-256 integrity of evidence files stored in MinIO.",
+    version="2.0.0",
 )
 
-BUCKET = os.environ["MINIO_BUCKET"]
 _DASHBOARD = Path(__file__).parent / "dashboard.html"
 
 
@@ -40,151 +31,92 @@ _DASHBOARD = Path(__file__).parent / "dashboard.html"
 def dashboard():
     return _DASHBOARD.read_text(encoding="utf-8")
 
-_SAFE_FILENAME = re.compile(r"[^\w.\-]")
 
+# ── Evidence list ─────────────────────────────────────────────────────────────
 
-def _safe_name(filename: str) -> str:
-    """Strip path components and replace unsafe characters."""
-    base = os.path.basename(filename or "upload")
-    return _SAFE_FILENAME.sub("_", base) or "upload"
-
-
-# ── Upload evidence ───────────────────────────────────────────────────────────
-
-@app.post("/evidence/upload", summary="Upload a piece of evidence")
-async def upload_evidence(file: UploadFile = File(...)):
-    """
-    Upload a file as evidence.
-    - Saves metadata in PostgreSQL first (status: pending).
-    - Stores the file in MinIO.
-    - Computes HMAC-SHA-256 using the key from OpenBao.
-    - Marks the record as verified on success.
-    """
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file.")
-
-    object_key = f"{uuid.uuid4()}_{_safe_name(file.filename)}"
-
-    bao = get_openbao_client()
-    key = get_hmac_key(bao)
-    fingerprint = compute_hmac(data, key)
-    minio = get_minio_client()
-
-    # DB record is created first so there is never an orphaned MinIO object.
-    conn = get_db_connection()
-    try:
-        file_id = save_file_record(
-            conn, file.filename, object_key, fingerprint, status="pending"
-        )
-        upload_file(minio, BUCKET, object_key, data)
-        write_audit_log(conn, object_key, "ok", fingerprint, fingerprint, "Uploaded")
-        update_file_status(conn, object_key, "verified")
-    finally:
-        conn.close()
-
-    return {
-        "id": file_id,
-        "filename": file.filename,
-        "object_key": object_key,
-        "hmac_hash": fingerprint,
-        "integrity_check": "ok",
-        "uploaded_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-# ── List all evidence ─────────────────────────────────────────────────────────
-
-@app.get("/evidence", summary="List all uploaded evidence files")
+@app.get("/evidence", summary="List all evidence files with integrity status")
 def list_evidence():
     conn = get_db_connection()
     try:
-        records = get_all_file_records(conn)
+        ensure_integrity_log_table(conn)
+        return get_all_evidence(conn)
     finally:
         conn.close()
-    for r in records:
-        if r.get("uploaded_at"):
-            r["uploaded_at"] = r["uploaded_at"].isoformat()
-    return records
 
 
-# ── Manual integrity check ────────────────────────────────────────────────────
+# ── Manual check ──────────────────────────────────────────────────────────────
 
-@app.post(
-    "/evidence/{object_key:path}/check",
-    summary="Manually trigger an integrity check",
-)
-def check_evidence(object_key: str):
-    """
-    Re-download the file from MinIO, recompute HMAC-SHA-256,
-    compare to stored fingerprint, write audit log.
-    """
+@app.post("/evidence/{evidence_id}/check", summary="Manually trigger an integrity check")
+def check_evidence(evidence_id: int):
     conn = get_db_connection()
     try:
-        record = get_file_record(conn, object_key)
+        ensure_integrity_log_table(conn)
+        record = get_evidence_by_id(conn, evidence_id)
         if not record:
-            raise HTTPException(status_code=404, detail="File not found.")
+            raise HTTPException(status_code=404, detail="Evidence not found.")
 
-        bao = get_openbao_client()
-        key = get_hmac_key(bao)
-        minio = get_minio_client()
+        vault_client = get_vault_client()
+        vault_path   = record["aes_key_reference"]
+        stored_hash  = record["hmac_hash"]
 
-        data = download_file(minio, BUCKET, object_key)
-        computed = compute_hmac(data, key)
-        stored = record["hmac_hash"]
-        result = "ok" if computed == stored else "tampered"
+        try:
+            hmac_key = get_hmac_key(vault_client, vault_path)
+        except KeyError as exc:
+            update_encryption_status(conn, record["crypto_id"], "unverifiable")
+            write_integrity_log(conn, evidence_id, "unverifiable", stored_hash, "", str(exc))
+            return JSONResponse(status_code=200, content={
+                "evidence_id": evidence_id,
+                "result": "unverifiable",
+                "message": str(exc),
+            })
 
-        write_audit_log(conn, object_key, result, stored, computed, "Manual check via API")
-        update_file_status(conn, object_key, result)
+        minio_client  = get_minio_client()
+        file_data     = download_file(minio_client, record["file_path"])
+        computed_hash = compute_hmac(file_data, hmac_key)
+        result        = "verified" if computed_hash == stored_hash else "tampered"
+
+        update_encryption_status(conn, record["crypto_id"], result)
+        write_integrity_log(conn, evidence_id, result, stored_hash, computed_hash, "Manual check")
 
         if result == "tampered":
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "object_key": object_key,
-                    "result": "tampered",
-                    "alert": "TAMPERING DETECTED — stored hash does not match computed hash.",
-                    "stored_hash": stored,
-                    "computed_hash": computed,
-                },
-            )
+            return JSONResponse(status_code=200, content={
+                "evidence_id": evidence_id,
+                "result": "tampered",
+                "alert": "TAMPERING DETECTED — stored hash does not match computed hash.",
+                "stored_hash": stored_hash,
+                "computed_hash": computed_hash,
+            })
 
         return {
-            "object_key": object_key,
-            "result": "ok",
-            "message": "File integrity verified. No tampering detected.",
-            "hash": computed,
+            "evidence_id": evidence_id,
+            "result": "verified",
+            "message": "File integrity confirmed. No tampering detected.",
+            "hash": computed_hash,
         }
     finally:
         conn.close()
 
 
-# ── Audit logs ────────────────────────────────────────────────────────────────
+# ── Integrity logs ────────────────────────────────────────────────────────────
 
-@app.get("/audit-logs", summary="View all audit logs")
-def all_audit_logs():
+@app.get("/integrity-logs", summary="View all integrity check log entries")
+def all_integrity_logs():
     conn = get_db_connection()
     try:
-        logs = get_audit_logs(conn)
+        ensure_integrity_log_table(conn)
+        return get_integrity_logs(conn)
     finally:
         conn.close()
-    for log in logs:
-        if log.get("check_time"):
-            log["check_time"] = log["check_time"].isoformat()
-    return logs
 
 
-@app.get("/audit-logs/{object_key:path}", summary="View audit logs for a specific file")
-def file_audit_logs(object_key: str):
+@app.get("/integrity-logs/{evidence_id}", summary="View integrity log for a specific file")
+def evidence_integrity_logs(evidence_id: int):
     conn = get_db_connection()
     try:
-        logs = get_audit_logs(conn, object_key)
+        ensure_integrity_log_table(conn)
+        return get_integrity_logs(conn, evidence_id)
     finally:
         conn.close()
-    for log in logs:
-        if log.get("check_time"):
-            log["check_time"] = log["check_time"].isoformat()
-    return logs
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

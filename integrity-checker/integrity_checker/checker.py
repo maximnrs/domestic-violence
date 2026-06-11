@@ -1,20 +1,22 @@
 """
-Integrity Checker — scheduled background process.
+Integrity Checker — periodic background process.
 
-Runs every CHECK_INTERVAL_SECONDS (default: 60).
-For each evidence file in PostgreSQL:
-  1. Downloads the file from MinIO.
-  2. Retrieves the HMAC key from OpenBao.
-  3. Recomputes the HMAC-SHA-256 fingerprint.
-  4. Compares it to the stored hash.
-  5. Writes the result to audit_logs.
-  6. Updates the file status to 'tampered' if mismatch detected.
-  7. Triggers an alert (logged to stdout) if tampering is found.
+Reads evidence from the Nura API database, downloads each encrypted file
+from MinIO, retrieves the per-file HMAC key from Vault, recomputes the
+HMAC-SHA-256 fingerprint, and compares it to the stored hash.
+
+Results are written to:
+  - encryption.integrity_status / encryption.hmac_verified_at
+  - integrity_check_log (created automatically on first run)
+
+Note: files uploaded before api-server-fix/vault.py was applied will be
+marked 'unverifiable' because their HMAC key was not stored in Vault.
 """
 
 import time
-import hmac
+import hmac as hmac_lib
 import hashlib
+import base64
 import logging
 import psycopg2
 import hvac
@@ -24,177 +26,195 @@ from config import settings as config
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [INTEGRITY CHECKER] %(levelname)s %(message)s",
+    format="%(asctime)s [INTEGRITY] %(levelname)s %(message)s",
 )
 log = logging.getLogger(__name__)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Clients ───────────────────────────────────────────────────────────────────
 
 def get_db():
     return psycopg2.connect(config.DATABASE_URL)
 
 
-def get_minio():
-    return Minio(
-        endpoint=config.MINIO_ENDPOINT,
-        access_key=config.MINIO_ACCESS_KEY,
-        secret_key=config.MINIO_SECRET_KEY,
-        secure=False,
-    )
-
-
-def get_hmac_key() -> bytes:
-    client = hvac.Client(
+def get_vault_client() -> hvac.Client:
+    return hvac.Client(
         url=config.VAULT_URL,
         token=config.VAULT_TOKEN,
         verify=not config.VAULT_SKIP_VERIFY,
     )
-    secret = client.secrets.kv.v2.read_secret_version(path=config.HMAC_SECRET_PATH)
-    return bytes.fromhex(secret["data"]["data"]["key"])
 
 
-def compute_hmac(data: bytes, key: bytes) -> str:
-    return hmac.new(key, data, hashlib.sha256).hexdigest()
+def get_minio() -> Minio:
+    endpoint = config.MINIO_ENDPOINT.replace("https://", "").replace("http://", "")
+    secure = config.MINIO_ENDPOINT.startswith("https://")
+    return Minio(endpoint=endpoint, access_key=config.MINIO_ACCESS_KEY,
+                 secret_key=config.MINIO_SECRET_KEY, secure=secure)
 
 
-def download_file(minio: Minio, object_key: str) -> bytes:
-    response = minio.get_object(config.MINIO_BUCKET, object_key)
-    try:
-        return response.read()
-    finally:
-        response.close()
-        response.release_conn()
+# ── Vault ─────────────────────────────────────────────────────────────────────
+
+def get_hmac_key(vault_client: hvac.Client, vault_path: str) -> bytes:
+    secret = vault_client.secrets.kv.v2.read_secret_version(
+        path=vault_path, mount_point="Domestic"
+    )
+    data = secret["data"]["data"]
+    if "hmac_key" not in data:
+        raise KeyError(
+            "hmac_key not in Vault — file uploaded before the fix. "
+            "Apply api-server-fix/ to the API-Server and re-upload."
+        )
+    return base64.b64decode(data["hmac_key"])
 
 
-def write_audit_log(conn, object_key, result, stored, computed, message):
+# ── DB helpers ────────────────────────────────────────────────────────────────
+
+def ensure_log_table(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS integrity_check_log (
+                id            SERIAL PRIMARY KEY,
+                evidence_id   INTEGER NOT NULL,
+                result        VARCHAR(20) NOT NULL,
+                stored_hash   TEXT,
+                computed_hash TEXT,
+                message       TEXT,
+                checked_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+
+
+def get_evidence_list(conn) -> list:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT e.evidence_id, e.file_name, e.file_path,
+                   enc.crypto_id, enc.hmac_hash, enc.aes_key_reference
+            FROM   evidence e
+            JOIN   encryption enc ON e.evidence_id = enc.evidence_id
+        """)
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def set_status(conn, crypto_id: int, status: str):
     with conn.cursor() as cur:
         cur.execute(
-            """
-            INSERT INTO audit_logs (object_key, result, stored_hash, computed_hash, message)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (object_key, result, stored, computed, message),
+            "UPDATE encryption SET integrity_status=%s, hmac_verified_at=NOW() WHERE crypto_id=%s",
+            (status, crypto_id),
         )
         conn.commit()
 
 
-def update_status(conn, object_key, status):
+def log_result(conn, evidence_id, result, stored, computed, message):
     with conn.cursor() as cur:
         cur.execute(
-            "UPDATE evidence_files SET status = %s WHERE object_key = %s",
-            (status, object_key),
+            "INSERT INTO integrity_check_log (evidence_id,result,stored_hash,computed_hash,message)"
+            " VALUES (%s,%s,%s,%s,%s)",
+            (evidence_id, result, stored, computed, message),
         )
         conn.commit()
 
 
-def alert(object_key: str, stored: str, computed: str):
-    """Alert system — logs to stdout. Can be extended to email/webhook."""
-    log.warning("=" * 60)
-    log.warning("TAMPERING DETECTED")
-    log.warning(f"   File      : {object_key}")
-    log.warning(f"   Stored    : {stored}")
-    log.warning(f"   Computed  : {computed}")
-    log.warning(f"   Time      : {datetime.now(timezone.utc).isoformat()}")
-    log.warning("=" * 60)
-
-
-# ── Main check loop ───────────────────────────────────────────────────────────
+# ── Main loop ─────────────────────────────────────────────────────────────────
 
 def run_checks():
-    log.info("Starting scheduled integrity check...")
-
+    log.info("Starting integrity check cycle...")
+    conn = get_db()
     try:
-        key = get_hmac_key()
-    except Exception as e:
-        log.error(f"Could not retrieve HMAC key from OpenBao: {e}")
-        return
+        ensure_log_table(conn)
+        evidence_list = get_evidence_list(conn)
 
-    try:
-        conn = get_db()
-    except Exception as e:
-        log.error(f"Could not connect to database: {e}")
-        return
-
-    try:
-        minio = get_minio()
-
-        with conn.cursor() as cur:
-            cur.execute("SELECT object_key, hmac_hash FROM evidence_files")
-            files = cur.fetchall()
-
-        if not files:
-            log.info("No evidence files found. Nothing to check.")
+        if not evidence_list:
+            log.info("No evidence files in database.")
             return
 
-        log.info(f"Checking {len(files)} file(s)...")
-        ok_count = 0
-        tampered_count = 0
+        vault_client = get_vault_client()
+        minio_client = get_minio()
 
-        for object_key, stored_hash in files:
+        log.info(f"Checking {len(evidence_list)} file(s)...")
+        ok = tampered = skipped = 0
+
+        for rec in evidence_list:
+            eid   = rec["evidence_id"]
+            fname = rec["file_name"]
+            fpath = rec["file_path"]
+            cid   = rec["crypto_id"]
+            stored_hash = rec["hmac_hash"]
+            vault_path  = rec["aes_key_reference"]
+
             try:
-                data = download_file(minio, object_key)
-                computed_hash = compute_hmac(data, key)
-                result = "ok" if computed_hash == stored_hash else "tampered"
+                hmac_key  = get_hmac_key(vault_client, vault_path)
+                response  = minio_client.get_object(config.MINIO_BUCKET, fpath)
+                try:
+                    file_data = response.read()
+                finally:
+                    response.close()
+                    response.release_conn()
 
-                write_audit_log(
-                    conn, object_key, result, stored_hash, computed_hash,
-                    "Scheduled check"
-                )
-                update_status(conn, object_key, result)
+                computed_hash = hmac_lib.new(hmac_key, file_data, hashlib.sha256).hexdigest()
+                result = "verified" if computed_hash == stored_hash else "tampered"
+
+                set_status(conn, cid, result)
+                log_result(conn, eid, result, stored_hash, computed_hash, "Scheduled check")
 
                 if result == "tampered":
-                    tampered_count += 1
-                    alert(object_key, stored_hash, computed_hash)
+                    tampered += 1
+                    log.warning("=" * 60)
+                    log.warning(f"TAMPERING DETECTED  [{eid}] {fname}")
+                    log.warning(f"  Stored  : {stored_hash}")
+                    log.warning(f"  Computed: {computed_hash}")
+                    log.warning(f"  Time    : {datetime.now(timezone.utc).isoformat()}")
+                    log.warning("=" * 60)
                 else:
-                    ok_count += 1
-                    log.info(f"  OK {object_key}")
+                    ok += 1
+                    log.info(f"  OK  [{eid}] {fname}")
 
-            except Exception as e:
-                log.error(f"  Error checking {object_key}: {e}")
+            except KeyError as exc:
+                skipped += 1
+                log.warning(f"  SKIP [{eid}] {fname}: {exc}")
                 try:
-                    write_audit_log(conn, object_key, "error", stored_hash, "", str(e))
-                except Exception as audit_err:
-                    log.error(f"  Could not write audit log for {object_key}: {audit_err}")
+                    set_status(conn, cid, "unverifiable")
+                    log_result(conn, eid, "unverifiable", stored_hash, "", str(exc))
+                except Exception:
+                    pass
 
-        log.info(f"Check complete. OK: {ok_count} | Tampered: {tampered_count}")
+            except Exception as exc:
+                log.error(f"  ERROR [{eid}] {fname}: {exc}")
+                try:
+                    log_result(conn, eid, "error", stored_hash, "", str(exc))
+                except Exception:
+                    pass
 
+        log.info(f"Done — OK: {ok} | Tampered: {tampered} | Unverifiable: {skipped}")
     finally:
         conn.close()
 
 
 def wait_for_services():
-    """Wait until PostgreSQL and OpenBao are reachable before starting.
-
-    The HMAC key may not exist yet on a fresh deployment — it is created by
-    the API on the first upload. run_checks handles that gracefully.
-    """
-    log.info("Waiting for services to be ready...")
+    log.info("Waiting for services...")
     for _ in range(30):
         try:
             conn = get_db()
+            ensure_log_table(conn)
             conn.close()
-            client = hvac.Client(
-                url=config.VAULT_URL,
-                token=config.VAULT_TOKEN,
-                verify=not config.VAULT_SKIP_VERIFY,
-            )
-            if not client.is_authenticated():
-                raise Exception("Vault token is not authenticated")
+            if not get_vault_client().is_authenticated():
+                raise Exception("Vault token invalid")
             log.info("Services ready.")
             return
-        except Exception:
+        except Exception as exc:
+            log.info(f"  Not ready: {exc}")
             time.sleep(5)
-    log.error("Services did not become ready in time. Exiting.")
+    log.error("Services never became ready.")
     raise SystemExit(1)
 
 
 if __name__ == "__main__":
     wait_for_services()
-    log.info(f"Integrity Checker started. Interval: {config.CHECK_INTERVAL_SECONDS}s")
+    log.info(f"Interval: {config.CHECK_INTERVAL_SECONDS}s")
     while True:
         try:
             run_checks()
-        except Exception as e:
-            log.error(f"Unexpected error in run_checks: {e}")
+        except Exception as exc:
+            log.error(f"Unexpected error: {exc}")
         time.sleep(config.CHECK_INTERVAL_SECONDS)
