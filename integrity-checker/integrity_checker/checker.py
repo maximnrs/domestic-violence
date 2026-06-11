@@ -12,7 +12,6 @@ For each evidence file in PostgreSQL:
   7. Triggers an alert (logged to stdout) if tampering is found.
 """
 
-import os
 import time
 import hmac
 import hashlib
@@ -21,6 +20,7 @@ import psycopg2
 import hvac
 from minio import Minio
 from datetime import datetime, timezone
+import config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,32 +28,25 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-BUCKET = os.environ["MINIO_BUCKET"]
-INTERVAL = int(os.environ.get("CHECK_INTERVAL_SECONDS", 60))
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_db():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    return psycopg2.connect(config.DATABASE_URL)
 
 
 def get_minio():
     return Minio(
-        endpoint=os.environ["MINIO_ENDPOINT"],
-        access_key=os.environ["MINIO_ACCESS_KEY"],
-        secret_key=os.environ["MINIO_SECRET_KEY"],
+        endpoint=config.MINIO_ENDPOINT,
+        access_key=config.MINIO_ACCESS_KEY,
+        secret_key=config.MINIO_SECRET_KEY,
         secure=False,
     )
 
 
 def get_hmac_key() -> bytes:
-    client = hvac.Client(
-        url=os.environ["OPENBAO_ADDR"],
-        token=os.environ["OPENBAO_TOKEN"],
-    )
-    path = os.environ["HMAC_SECRET_PATH"]
-    secret = client.secrets.kv.v2.read_secret_version(path=path)
+    client = hvac.Client(url=config.OPENBAO_ADDR, token=config.OPENBAO_TOKEN)
+    secret = client.secrets.kv.v2.read_secret_version(path=config.HMAC_SECRET_PATH)
     return bytes.fromhex(secret["data"]["data"]["key"])
 
 
@@ -62,7 +55,7 @@ def compute_hmac(data: bytes, key: bytes) -> str:
 
 
 def download_file(minio: Minio, object_key: str) -> bytes:
-    response = minio.get_object(BUCKET, object_key)
+    response = minio.get_object(config.MINIO_BUCKET, object_key)
     try:
         return response.read()
     finally:
@@ -177,13 +170,7 @@ def wait_for_services():
         try:
             conn = get_db()
             conn.close()
-            # Verify OpenBao is reachable and the token is valid.
-            # We do NOT check for the HMAC key here because it is
-            # created lazily by the API on the first file upload.
-            client = hvac.Client(
-                url=os.environ["OPENBAO_ADDR"],
-                token=os.environ["OPENBAO_TOKEN"],
-            )
+            client = hvac.Client(url=config.OPENBAO_ADDR, token=config.OPENBAO_TOKEN)
             if not client.is_authenticated():
                 raise Exception("OpenBao token is not authenticated")
             log.info("Services ready.")
@@ -196,10 +183,10 @@ def wait_for_services():
 
 if __name__ == "__main__":
     wait_for_services()
-    log.info(f"Integrity Checker started. Interval: {INTERVAL}s")
+    log.info(f"Integrity Checker started. Interval: {config.CHECK_INTERVAL_SECONDS}s")
     while True:
         try:
             run_checks()
         except Exception as e:
             log.error(f"Unexpected error in run_checks: {e}")
-        time.sleep(INTERVAL)
+        time.sleep(config.CHECK_INTERVAL_SECONDS)

@@ -1,32 +1,28 @@
+import os
 import hmac
 import hashlib
-import os
 import hvac
 import psycopg2
 from minio import Minio
+import config
 
 
 # ── OpenBao ──────────────────────────────────────────────────────────────────
 
 def get_openbao_client() -> hvac.Client:
-    client = hvac.Client(
-        url=os.environ["OPENBAO_ADDR"],
-        token=os.environ["OPENBAO_TOKEN"],
-    )
-    return client
+    return hvac.Client(url=config.OPENBAO_ADDR, token=config.OPENBAO_TOKEN)
 
 
 def get_hmac_key(client: hvac.Client) -> bytes:
     """Retrieve HMAC secret key from OpenBao. Creates one only on a genuine first run."""
-    path = os.environ["HMAC_SECRET_PATH"]
     try:
-        secret = client.secrets.kv.v2.read_secret_version(path=path)
+        secret = client.secrets.kv.v2.read_secret_version(path=config.HMAC_SECRET_PATH)
         return bytes.fromhex(secret["data"]["data"]["key"])
     except hvac.exceptions.InvalidPath:
         # Secret genuinely does not exist yet — generate and store it once.
         key = os.urandom(32)
         client.secrets.kv.v2.create_or_update_secret(
-            path=path,
+            path=config.HMAC_SECRET_PATH,
             secret={"key": key.hex()},
         )
         return key
@@ -44,9 +40,9 @@ def compute_hmac(data: bytes, key: bytes) -> str:
 
 def get_minio_client() -> Minio:
     return Minio(
-        endpoint=os.environ["MINIO_ENDPOINT"],
-        access_key=os.environ["MINIO_ACCESS_KEY"],
-        secret_key=os.environ["MINIO_SECRET_KEY"],
+        endpoint=config.MINIO_ENDPOINT,
+        access_key=config.MINIO_ACCESS_KEY,
+        secret_key=config.MINIO_SECRET_KEY,
         secure=False,
     )
 
@@ -74,7 +70,7 @@ def download_file(client: Minio, bucket: str, object_key: str) -> bytes:
 # ── PostgreSQL ────────────────────────────────────────────────────────────────
 
 def get_db_connection():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    return psycopg2.connect(config.DATABASE_URL)
 
 
 def save_file_record(
