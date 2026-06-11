@@ -1,7 +1,11 @@
 version: "3.9"
 
 # Connects to the existing Nura API infrastructure (PostgreSQL, MinIO, Vault).
-# All addresses live in .env — no extra flags needed.
+# network_mode: host is required so the containers use the Proxmox LXC's
+# network interface and can reach 192.168.178.x addresses.
+# With host networking, ports are exposed directly on the host — no mapping needed.
+#   Dashboard:  http://<proxmox-ip>:8001
+#   API docs:   http://<proxmox-ip>:8001/docs
 
 services:
 
@@ -10,6 +14,7 @@ services:
       context: ./api
     container_name: integrity_api
     restart: unless-stopped
+    network_mode: host
     environment:
       DATABASE_URL: ${DATABASE_URL}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
@@ -19,16 +24,13 @@ services:
       VAULT_URL: ${VAULT_URL}
       VAULT_TOKEN: ${VAULT_TOKEN}
       VAULT_SKIP_VERIFY: ${VAULT_SKIP_VERIFY:-false}
-    ports:
-      - "8001:8000"   # 8001 on host to avoid conflict with the main API-Server on 8000
-    networks:
-      - integrity
 
   integrity_checker:
     build:
       context: ./integrity_checker
     container_name: integrity_checker
     restart: unless-stopped
+    network_mode: host
     environment:
       DATABASE_URL: ${DATABASE_URL}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
@@ -39,9 +41,3 @@ services:
       VAULT_TOKEN: ${VAULT_TOKEN}
       VAULT_SKIP_VERIFY: ${VAULT_SKIP_VERIFY:-false}
       CHECK_INTERVAL_SECONDS: ${CHECK_INTERVAL_SECONDS:-60}
-    networks:
-      - integrity
-
-networks:
-  integrity:
-    driver: bridge
