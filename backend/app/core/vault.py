@@ -8,16 +8,19 @@ client = hvac.Client(
     verify=False
 )
 
-async def store_key(user_id: int, incident_id: int, file_id: str, key_bytes: bytes) -> str:
+async def store_key(user_id: int, incident_id: int, file_id: str, aes_key: bytes, hmac_key: bytes) -> str:
     """
-    Store an AES-256 key in OpenBao and return the reference path.
+    Store both AES key and HMAC key in OpenBao.
     """
     key_path = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
-    
+
     try:
         client.secrets.kv.v2.create_or_update_secret(
             path=key_path,
-            secret={"key": base64.b64encode(key_bytes).decode('utf-8')},
+            secret={
+                "aes_key": base64.b64encode(aes_key).decode('utf-8'),
+                "hmac_key": base64.b64encode(hmac_key).decode('utf-8')
+            },
             mount_point="Domestic"
         )
         return key_path
@@ -26,26 +29,42 @@ async def store_key(user_id: int, incident_id: int, file_id: str, key_bytes: byt
 
 async def retrieve_key(user_id: int, incident_id: int, file_id: str) -> bytes:
     """
-    Retrieve an AES-256 key from OpenBao.
+    Retrieve the AES key from OpenBao.
     """
     key_path = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
-    
+
     try:
         secret = client.secrets.kv.v2.read_secret_version(
             path=key_path,
             mount_point="Domestic"
         )
-        key_base64 = secret['data']['data']['key']
+        key_base64 = secret['data']['data']['aes_key']
         return base64.b64decode(key_base64)
     except Exception as e:
         raise ValueError(f"Failed to retrieve key from OpenBao: {str(e)}")
 
-async def delete_key(user_id: int, incident_id: int, file_id: str):
+async def retrieve_hmac_key(user_id: int, incident_id: int, file_id: str) -> bytes:
     """
-    Delete a key from OpenBao.
+    Retrieve the HMAC key from OpenBao.
     """
     key_path = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
-    
+
+    try:
+        secret = client.secrets.kv.v2.read_secret_version(
+            path=key_path,
+            mount_point="Domestic"
+        )
+        key_base64 = secret['data']['data']['hmac_key']
+        return base64.b64decode(key_base64)
+    except Exception as e:
+        raise ValueError(f"Failed to retrieve HMAC key from OpenBao: {str(e)}")
+
+async def delete_key(user_id: int, incident_id: int, file_id: str):
+    """
+    Delete keys from OpenBao.
+    """
+    key_path = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
+
     try:
         client.secrets.kv.v2.delete_secret_version(
             path=key_path,
