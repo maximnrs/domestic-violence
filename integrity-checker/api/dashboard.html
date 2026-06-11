@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Evidence Integrity System</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f4f8;
+    color: #1a202c;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: #1e293b;
+    color: #fff;
+    padding: 0 2rem;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+  header h1 { font-size: 1.2rem; font-weight: 600; letter-spacing: .5px; }
+  #last-refresh { font-size: .75rem; color: #94a3b8; }
+
+  /* ── Layout ── */
+  main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* ── Stat cards ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    text-align: center;
+  }
+  .stat .number { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+  .stat .label  { font-size: .8rem; color: #64748b; margin-top: .4rem; text-transform: uppercase; letter-spacing: .5px; }
+  .stat.total   .number { color: #3b82f6; }
+  .stat.ok      .number { color: #22c55e; }
+  .stat.tampered .number { color: #ef4444; }
+  .stat.pending  .number { color: #f59e0b; }
+
+  /* ── Cards ── */
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    margin-bottom: 2rem;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-header h2 { font-size: 1rem; font-weight: 600; }
+
+  /* ── Upload zone ── */
+  #drop-zone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 10px;
+    margin: 1.5rem;
+    padding: 2.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: background .2s, border-color .2s;
+    color: #64748b;
+  }
+  #drop-zone.dragover { background: #eff6ff; border-color: #3b82f6; }
+  #drop-zone svg { width: 40px; height: 40px; stroke: #94a3b8; margin-bottom: .8rem; }
+  #drop-zone p { font-size: .9rem; }
+  #drop-zone span { font-size: .8rem; color: #94a3b8; }
+  #file-input { display: none; }
+
+  /* ── Upload progress ── */
+  #upload-status {
+    margin: 0 1.5rem 1.5rem;
+    padding: .8rem 1rem;
+    border-radius: 8px;
+    font-size: .85rem;
+    display: none;
+  }
+  #upload-status.success { background: #dcfce7; color: #166534; }
+  #upload-status.error   { background: #fee2e2; color: #991b1b; }
+  #upload-status.loading { background: #eff6ff; color: #1d4ed8; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  th { padding: .75rem 1rem; text-align: left; font-size: .75rem; text-transform: uppercase;
+       letter-spacing: .5px; color: #64748b; border-bottom: 1px solid #e2e8f0;
+       background: #f8fafc; }
+  td { padding: .85rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+
+  .filename { font-weight: 500; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .key      { font-family: monospace; font-size: .75rem; color: #64748b;
+               max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hash     { font-family: monospace; font-size: .75rem; color: #94a3b8; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-block;
+    padding: .2rem .65rem;
+    border-radius: 9999px;
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .badge.ok       { background: #dcfce7; color: #166534; }
+  .badge.verified { background: #dcfce7; color: #166534; }
+  .badge.tampered { background: #fee2e2; color: #991b1b; }
+  .badge.pending  { background: #fef9c3; color: #854d0e; }
+  .badge.error    { background: #f1f5f9; color: #475569; }
+
+  /* ── Buttons ── */
+  .btn {
+    border: none;
+    border-radius: 6px;
+    padding: .35rem .8rem;
+    font-size: .78rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-check  { background: #3b82f6; color: #fff; }
+  .btn-check:disabled { background: #cbd5e1; cursor: default; opacity: 1; }
+  .btn-refresh { background: #f1f5f9; color: #475569; }
+
+  /* ── Empty state ── */
+  .empty { text-align: center; padding: 3rem 1rem; color: #94a3b8; font-size: .9rem; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem;
+    background: #1e293b; color: #fff;
+    padding: .8rem 1.2rem; border-radius: 8px;
+    font-size: .85rem; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .25s, transform .25s;
+    pointer-events: none; z-index: 999;
+    max-width: 320px;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.tampered { background: #dc2626; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Evidence Integrity System</h1>
+  <span id="last-refresh">Loading…</span>
+</header>
+
+<main>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat total">
+      <div class="number" id="s-total">—</div>
+      <div class="label">Total Files</div>
+    </div>
+    <div class="stat ok">
+      <div class="number" id="s-ok">—</div>
+      <div class="label">Verified</div>
+    </div>
+    <div class="stat tampered">
+      <div class="number" id="s-tampered">—</div>
+      <div class="label">Tampered</div>
+    </div>
+    <div class="stat pending">
+      <div class="number" id="s-pending">—</div>
+      <div class="label">Pending</div>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card">
+    <div class="card-header"><h2>Upload Evidence</h2></div>
+    <div id="drop-zone">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12M8 8l4-4 4 4"/>
+      </svg>
+      <p>Drag &amp; drop a file here, or <strong>click to browse</strong></p>
+      <span>Any file type accepted</span>
+    </div>
+    <div id="upload-status"></div>
+    <input type="file" id="file-input" />
+  </div>
+
+  <!-- Evidence files -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Evidence Files</h2>
+      <button class="btn btn-refresh" onclick="loadAll()">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Filename</th>
+            <th>Status</th>
+            <th>Uploaded</th>
+            <th>Fingerprint (HMAC)</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="files-body">
+          <tr><td colspan="6" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Audit log -->
+  <div class="card">
+    <div class="card-header"><h2>Audit Log</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>File Key</th>
+            <th>Result</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="audit-body">
+          <tr><td colspan="4" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function fmt(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
+}
+
+function badge(status) {
+  const s = (status || 'unknown').toLowerCase();
+  return `<span class="badge ${s}">${s}</span>`;
+}
+
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 3500);
+}
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+
+async function loadAll() {
+  await Promise.all([loadFiles(), loadAudit()]);
+  document.getElementById('last-refresh').textContent =
+    'Last updated: ' + new Date().toLocaleTimeString();
+}
+
+async function loadFiles() {
+  try {
+    const res  = await fetch('/evidence');
+    const data = await res.json();
+
+    // Stats
+    const ok       = data.filter(f => ['ok','verified'].includes(f.status)).length;
+    const tampered = data.filter(f => f.status === 'tampered').length;
+    const pending  = data.filter(f => f.status === 'pending').length;
+    document.getElementById('s-total').textContent    = data.length;
+    document.getElementById('s-ok').textContent       = ok;
+    document.getElementById('s-tampered').textContent = tampered;
+    document.getElementById('s-pending').textContent  = pending;
+
+    // Table
+    const tbody = document.getElementById('files-body');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No evidence files uploaded yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((f, i) => `
+      <tr>
+        <td>${f.id}</td>
+        <td class="filename" title="${f.filename}">${f.filename}</td>
+        <td>${badge(f.status)}</td>
+        <td>${fmt(f.uploaded_at)}</td>
+        <td class="hash" title="${f.hmac_hash}">${f.hmac_hash ? f.hmac_hash.slice(0,16) + '…' : '—'}</td>
+        <td>
+          <button class="btn btn-check"
+            onclick="checkFile('${f.object_key}', this)"
+            ${f.status === 'tampered' ? '' : ''}>
+            Check Now
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    document.getElementById('files-body').innerHTML =
+      '<tr><td colspan="6" class="empty">Could not load files.</td></tr>';
+  }
+}
+
+async function loadAudit() {
+  try {
+    const res  = await fetch('/audit-logs');
+    const data = await res.json();
+    const tbody = document.getElementById('audit-body');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">No audit entries yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.slice(0, 100).map(l => `
+      <tr>
+        <td>${fmt(l.check_time)}</td>
+        <td class="key" title="${l.object_key}">${l.object_key ? l.object_key.slice(0, 32) + '…' : '—'}</td>
+        <td>${badge(l.result)}</td>
+        <td>${l.message || '—'}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    document.getElementById('audit-body').innerHTML =
+      '<tr><td colspan="4" class="empty">Could not load audit log.</td></tr>';
+  }
+}
+
+// ── Check integrity ───────────────────────────────────────────────────────────
+
+async function checkFile(objectKey, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    const res  = await fetch(`/evidence/${encodeURIComponent(objectKey)}/check`, { method: 'POST' });
+    const data = await res.json();
+    if (data.result === 'tampered') {
+      toast('TAMPERING DETECTED — ' + objectKey.split('_').slice(1).join('_'), 'tampered');
+    } else {
+      toast('Integrity verified — file is intact.');
+    }
+    await loadAll();
+  } catch(e) {
+    toast('Check failed. See console for details.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Check Now';
+  }
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+
+function setStatus(msg, type) {
+  const el = document.getElementById('upload-status');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+async function uploadFile(file) {
+  if (!file) return;
+  setStatus('Uploading ' + file.name + '…', 'loading');
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res  = await fetch('/evidence/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+    setStatus('Uploaded and fingerprinted: ' + file.name, 'success');
+    setTimeout(() => setStatus('', ''), 4000);
+    await loadAll();
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'error');
+  }
+}
+
+// Drop zone
+const zone  = document.getElementById('drop-zone');
+const input = document.getElementById('file-input');
+
+zone.addEventListener('click', () => input.click());
+input.addEventListener('change', e => uploadFile(e.target.files[0]));
+
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('dragover');
+  uploadFile(e.dataTransfer.files[0]);
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+loadAll();
+setInterval(loadAll, 30000); // auto-refresh every 30 s
+</script>
+</body>
+</html>

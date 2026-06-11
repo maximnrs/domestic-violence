@@ -1,9 +1,10 @@
 import os
 import re
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from utils import (
     get_openbao_client,
     get_hmac_key,
@@ -30,6 +31,14 @@ app = FastAPI(
 )
 
 BUCKET = os.environ["MINIO_BUCKET"]
+_DASHBOARD = Path(__file__).parent / "dashboard.html"
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def dashboard():
+    return _DASHBOARD.read_text(encoding="utf-8")
 
 _SAFE_FILENAME = re.compile(r"[^\w.\-]")
 
