@@ -20,7 +20,7 @@ import psycopg2
 import hvac
 from minio import Minio
 from datetime import datetime, timezone
-import config
+from config import settings as config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,7 +45,11 @@ def get_minio():
 
 
 def get_hmac_key() -> bytes:
-    client = hvac.Client(url=config.OPENBAO_ADDR, token=config.OPENBAO_TOKEN)
+    client = hvac.Client(
+        url=config.VAULT_URL,
+        token=config.VAULT_TOKEN,
+        verify=not config.VAULT_SKIP_VERIFY,
+    )
     secret = client.secrets.kv.v2.read_secret_version(path=config.HMAC_SECRET_PATH)
     return bytes.fromhex(secret["data"]["data"]["key"])
 
@@ -170,9 +174,13 @@ def wait_for_services():
         try:
             conn = get_db()
             conn.close()
-            client = hvac.Client(url=config.OPENBAO_ADDR, token=config.OPENBAO_TOKEN)
+            client = hvac.Client(
+                url=config.VAULT_URL,
+                token=config.VAULT_TOKEN,
+                verify=not config.VAULT_SKIP_VERIFY,
+            )
             if not client.is_authenticated():
-                raise Exception("OpenBao token is not authenticated")
+                raise Exception("Vault token is not authenticated")
             log.info("Services ready.")
             return
         except Exception:

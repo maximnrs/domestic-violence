@@ -4,17 +4,21 @@ import hashlib
 import hvac
 import psycopg2
 from minio import Minio
-import config
+from config import settings as config
 
 
-# ── OpenBao ──────────────────────────────────────────────────────────────────
+# ── Vault ─────────────────────────────────────────────────────────────────────
 
 def get_openbao_client() -> hvac.Client:
-    return hvac.Client(url=config.OPENBAO_ADDR, token=config.OPENBAO_TOKEN)
+    return hvac.Client(
+        url=config.VAULT_URL,
+        token=config.VAULT_TOKEN,
+        verify=not config.VAULT_SKIP_VERIFY,
+    )
 
 
 def get_hmac_key(client: hvac.Client) -> bytes:
-    """Retrieve HMAC secret key from OpenBao. Creates one only on a genuine first run."""
+    """Retrieve HMAC secret key from Vault. Creates one only on a genuine first run."""
     try:
         secret = client.secrets.kv.v2.read_secret_version(path=config.HMAC_SECRET_PATH)
         return bytes.fromhex(secret["data"]["data"]["key"])

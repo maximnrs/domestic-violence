@@ -1,15 +1,24 @@
-import os
+from pydantic_settings import BaseSettings
 
-# ── Database ──────────────────────────────────────────────────────────────────
-DATABASE_URL: str = os.environ["DATABASE_URL"]
 
-# ── MinIO ─────────────────────────────────────────────────────────────────────
-MINIO_ENDPOINT: str   = os.environ["MINIO_ENDPOINT"]
-MINIO_ACCESS_KEY: str = os.environ["MINIO_ACCESS_KEY"]
-MINIO_SECRET_KEY: str = os.environ["MINIO_SECRET_KEY"]
-MINIO_BUCKET: str     = os.environ["MINIO_BUCKET"]
+class Settings(BaseSettings):
+    # ── Database ──────────────────────────────────────────────────────────────
+    DATABASE_URL: str
 
-# ── OpenBao / Vault ───────────────────────────────────────────────────────────
-OPENBAO_ADDR: str     = os.environ["OPENBAO_ADDR"]
-OPENBAO_TOKEN: str    = os.environ["OPENBAO_TOKEN"]
-HMAC_SECRET_PATH: str = os.environ["HMAC_SECRET_PATH"]
+    # ── MinIO ─────────────────────────────────────────────────────────────────
+    MINIO_ENDPOINT: str
+    MINIO_ACCESS_KEY: str
+    MINIO_SECRET_KEY: str
+    MINIO_BUCKET: str
+
+    # ── Vault ─────────────────────────────────────────────────────────────────
+    VAULT_URL: str
+    VAULT_TOKEN: str
+    VAULT_SKIP_VERIFY: bool = False   # set True if using a self-signed certificate
+    HMAC_SECRET_PATH: str = "secret/hmac_key"
+
+    class Config:
+        env_file = ".env"
+
+
+settings = Settings()
