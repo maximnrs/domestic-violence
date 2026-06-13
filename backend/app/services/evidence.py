@@ -2,6 +2,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.schemas import EvidenceCreate
 from app.models.evidence import Evidence
 from app.services import encryption, metadata, auditlog
+from app.services.ports import (
+    AuditLogger,
+    EncryptionService,
+    MetadataRepository,
+    TimestampClient,
+)
 from app.core import timestamp
 
 async def upload_evidence(
@@ -10,7 +16,11 @@ async def upload_evidence(
     incident_id: int,
     file_name: str,
     file_bytes: bytes,
-    data: EvidenceCreate
+    data: EvidenceCreate,
+    encryption_service: EncryptionService | None = None,
+    metadata_repository: MetadataRepository | None = None,
+    audit_logger: AuditLogger | None = None,
+    timestamp_client: TimestampClient | None = None,
 ) -> Evidence:
     """
     Orchestrate the full evidence upload flow:
@@ -32,13 +42,18 @@ async def upload_evidence(
     Returns:
         The created Evidence record
     """
+    encryption_service = encryption_service or encryption
+    metadata_repository = metadata_repository or metadata
+    audit_logger = audit_logger or auditlog
+    timestamp_client = timestamp_client or timestamp
+
     # Step 1: Encrypt the file
-    encryption_data = await encryption.encrypt_file(user_id, incident_id, file_bytes)    
+    encryption_data = await encryption_service.encrypt_file(user_id, incident_id, file_bytes)
     # Step 2: Get a timestamp
-    ts_data = await timestamp.request_timestamp()
+    ts_data = await timestamp_client.request_timestamp()
     
     # Step 3: Save metadata to database
-    evidence = await metadata.save_evidence_metadata(
+    evidence = await metadata_repository.save_evidence_metadata(
         db,
         user_id,
         incident_id,
@@ -48,7 +63,7 @@ async def upload_evidence(
     )
     
     # Step 4: Write audit log
-    await auditlog.log_action(
+    await audit_logger.log_action(
         db,
         user_id=user_id,
         case_id=None,
@@ -65,7 +80,10 @@ async def upload_evidence(
 async def download_evidence(
     db: AsyncSession,
     user_id: int,
-    evidence_id: int
+    evidence_id: int,
+    encryption_service: EncryptionService | None = None,
+    metadata_repository: MetadataRepository | None = None,
+    audit_logger: AuditLogger | None = None,
 ) -> bytes:
     """
     Orchestrate evidence download:
@@ -83,19 +101,23 @@ async def download_evidence(
     Returns:
         The decrypted file bytes
     """
+    encryption_service = encryption_service or encryption
+    metadata_repository = metadata_repository or metadata
+    audit_logger = audit_logger or auditlog
+
     # Step 1: Verify ownership
-    evidence = await metadata.get_evidence(db, evidence_id, user_id)
+    evidence = await metadata_repository.get_evidence(db, evidence_id, user_id)
     
     # Step 2: Get encryption metadata and decrypt the file
-    encryption_metadata = await metadata.get_evidence_encryption(db, evidence_id)
-    decrypted_bytes = await encryption.decrypt_file(
+    encryption_metadata = await metadata_repository.get_evidence_encryption(db, evidence_id)
+    decrypted_bytes = await encryption_service.decrypt_file(
         evidence.file_path,
         encryption_metadata.aes_key_reference,
         encryption_metadata.iv_nonce
     )
     
     # Step 3: Log the download
-    await auditlog.log_action(
+    await audit_logger.log_action(
         db,
         user_id=user_id,
         case_id=None,
@@ -112,15 +134,20 @@ async def download_evidence(
 async def delete_evidence(
     db: AsyncSession,
     user_id: int,
-    evidence_id: int
+    evidence_id: int,
+    metadata_repository: MetadataRepository | None = None,
+    audit_logger: AuditLogger | None = None,
 ):
     """
     Delete evidence (soft delete or permanent removal).
     """
-    evidence = await metadata.get_evidence(db, evidence_id, user_id)
+    metadata_repository = metadata_repository or metadata
+    audit_logger = audit_logger or auditlog
+
+    evidence = await metadata_repository.get_evidence(db, evidence_id, user_id)
     
     # Log the deletion
-    await auditlog.log_action(
+    await audit_logger.log_action(
         db,
         user_id=user_id,
         case_id=None,

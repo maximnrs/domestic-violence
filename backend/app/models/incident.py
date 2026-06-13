@@ -1,6 +1,6 @@
 import enum
 from datetime import date, time
-from sqlalchemy import String, Date, Integer, ForeignKey, Time, Boolean, Text, Enum
+from sqlalchemy import String, Date, Integer, ForeignKey, Time, Boolean, Text, Enum, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -23,4 +23,4 @@ class Incident(Base):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     incident_type: Mapped[IncidentType | None] = mapped_column(Enum(IncidentType, native_enum=False), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    creation_date: Mapped[date] = mapped_column(Date, server_default="CURRENT_DATE")
+    creation_date: Mapped[date] = mapped_column(Date, server_default=text("CURRENT_DATE"))
