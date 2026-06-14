@@ -121,6 +121,12 @@ class EvidenceResponse(BaseModel):
     evidence_activation: str | None
     file_path: str
     file_hash: str
+    timestamp_token: str | None
+    timestamp_authority: str | None
+    timestamp_status: str | None
+    timestamp_hash_algorithm: str | None
+    timestamp_message_imprint: str | None
+    timestamp_nonce: str | None
     created_at: datetime
     description: str | None
 

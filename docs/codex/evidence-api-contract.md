@@ -118,6 +118,7 @@ There are no existing mobile evidence client methods.
   - Content type: `multipart/form-data`
   - Response: `EvidenceResponse`
   - Error: `400` for backend `ValueError`; `422` for missing/invalid multipart fields.
+  - Error: `503` when the trusted timestamp authority cannot be reached, times out, or rejects the timestamp request.
 - Download evidence: `GET /evidence/{evidence_id}/download`
   - Response: `{ "status": "success", "message": "Evidence file ready for download", "data": string }`, where `data` is hex-encoded bytes.
 
@@ -136,10 +137,20 @@ type EvidenceResponse = {
   evidence_activation: string | null;
   file_path: string;
   file_hash: string;
+  timestamp_token: string | null; // base64 DER RFC 3161 TimeStampToken
+  timestamp_authority: string | null;
+  timestamp_status: string | null;
+  timestamp_hash_algorithm: string | null;
+  timestamp_message_imprint: string | null; // SHA-256 digest timestamped by the TSA
+  timestamp_nonce: string | null;
   created_at: string;
   description: string | null;
 };
 ```
+
+`created_at` is database metadata only. For new uploads, proof that the evidence existed at upload time comes from `timestamp_token`, which is issued by the configured RFC 3161 timestamp authority for the SHA-256 digest of the uploaded evidence bytes.
+
+Existing PostgreSQL databases need the timestamp columns from `backend/migrations/20260615_add_evidence_timestamp_columns.sql` before deploying this API change.
 
 `EvidenceTypeResponse`:
 
@@ -170,6 +181,8 @@ Optional multipart fields:
 - `description`: string.
 
 Before reading `file`, encrypting bytes, writing object storage data, or creating evidence metadata, the backend now verifies that `incident_id` resolves to an Incident whose Case is owned by the authenticated user. Inaccessible or nonexistent incidents return `404` using the existing incident error convention. Upload processing failures after authorization return `400`.
+
+After incident authorization and before encryption/storage, the backend requests an RFC 3161 timestamp token from the configured trusted timestamp authority. If the user/backend cannot reach the authority, the request times out, or the authority rejects the timestamp request, upload returns `503` and no evidence metadata is saved.
 
 Backend does not inspect `file.content_type`, file extension, or uploaded MIME type. No source-level accepted audio MIME list exists. No source-level size limit exists beyond FastAPI/server/proxy infrastructure.
 

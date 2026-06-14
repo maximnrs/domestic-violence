@@ -81,6 +81,12 @@ export type EvidenceResponse = {
   evidence_activation: string | null;
   file_path: string;
   file_hash: string;
+  timestamp_token: string | null;
+  timestamp_authority: string | null;
+  timestamp_status: string | null;
+  timestamp_hash_algorithm: string | null;
+  timestamp_message_imprint: string | null;
+  timestamp_nonce: string | null;
   created_at: string;
   description: string | null;
 };

@@ -284,8 +284,8 @@ export default function WrittenNoteScreen() {
     try {
       setIsSubmitting(true);
       const evidenceTypeId = await resolveWrittenNoteTypeId();
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `written-note-${timestamp}.txt`;
+      const fileDateStamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `written-note-${fileDateStamp}.txt`;
       const baseDirectory = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
 
       if (!baseDirectory) {

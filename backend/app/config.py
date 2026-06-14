@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    TSA_URL: str = "http://timestamp.sectigo.com/rfc3161"
+    TSA_TIMEOUT_SECONDS: float = 10.0
 
     class Config:
         env_file = "../.env"

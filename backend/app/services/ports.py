@@ -51,7 +51,7 @@ class EncryptionService(Protocol):
 
 
 class TimestampClient(Protocol):
-    async def request_timestamp(self) -> dict:
+    async def request_timestamp(self, file_bytes: bytes) -> dict:
         ...
 
 
@@ -63,6 +63,7 @@ class MetadataRepository(Protocol):
         incident_id: int,
         file_name: str,
         encryption_data: dict,
+        timestamp_data: dict,
         data: EvidenceCreate,
     ) -> Evidence:
         ...

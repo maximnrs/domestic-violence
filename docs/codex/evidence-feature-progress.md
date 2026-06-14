@@ -29,6 +29,10 @@ Implemented backend contract work needed before mobile evidence capture can be s
   - `written_note`
   - `voice_audio`
 - Secured `POST /evidence/` so incident ownership is verified before reading uploaded file bytes.
+- Replaced the placeholder timestamp implementation with an RFC 3161 timestamp authority request for the SHA-256 digest of uploaded evidence bytes.
+- Uploads now fail before encryption/storage when the trusted timestamp authority is offline, unreachable, times out, or rejects the request.
+- Evidence metadata now persists the base64 DER timestamp token, authority URL, status, hash algorithm, message imprint, and nonce.
+- Added an idempotent PostgreSQL migration script for the new evidence timestamp columns.
 - Repaired evidence download for new uploads so AES-256-GCM encrypted object bytes can be decrypted and returned as hex-encoded original bytes.
 - Added focused backend tests for evidence type lookup, upload authorization, download authorization, metadata-only schema behavior, and text/binary encryption round trips.
 
@@ -114,6 +118,7 @@ Evidence records are rendered with neutral metadata only:
 
 - `file_name`, or `Evidence item` fallback;
 - `created_at`;
+- RFC 3161 timestamp status/authority when present;
 - neutral `evidence_type_id` display;
 - `description`, when present;
 - optional location/device/IMEI/activation metadata when populated.

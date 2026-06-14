@@ -24,10 +24,10 @@ async def upload_evidence(
 ) -> Evidence:
     """
     Orchestrate the full evidence upload flow:
-    1. Encrypt the file
-    2. Store encryption key in OpenBao
-    3. Upload encrypted file to MinIO
-    4. Get RFC 3161 timestamp
+    1. Get RFC 3161 timestamp for the original evidence bytes
+    2. Encrypt the file
+    3. Store encryption key in OpenBao
+    4. Upload encrypted file to MinIO
     5. Save metadata to PostgreSQL
     6. Write audit log
     
@@ -47,10 +47,11 @@ async def upload_evidence(
     audit_logger = audit_logger or auditlog
     timestamp_client = timestamp_client or timestamp
 
-    # Step 1: Encrypt the file
+    # Step 1: Get a trusted RFC 3161 timestamp for the original evidence bytes.
+    timestamp_data = await timestamp_client.request_timestamp(file_bytes)
+
+    # Step 2: Encrypt the file
     encryption_data = await encryption_service.encrypt_file(user_id, incident_id, file_bytes)
-    # Step 2: Get a timestamp
-    ts_data = await timestamp_client.request_timestamp()
     
     # Step 3: Save metadata to database
     evidence = await metadata_repository.save_evidence_metadata(
@@ -59,6 +60,7 @@ async def upload_evidence(
         incident_id,
         file_name,
         encryption_data,
+        timestamp_data,
         data
     )
     

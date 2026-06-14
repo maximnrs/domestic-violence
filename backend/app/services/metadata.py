@@ -3,7 +3,6 @@ from sqlalchemy import select
 from app.models.evidence import Evidence
 from app.models.encryption import Encryption
 from app.models.schemas import EvidenceCreate
-from datetime import datetime
 
 async def save_evidence_metadata(
     db: AsyncSession,
@@ -11,6 +10,7 @@ async def save_evidence_metadata(
     incident_id: int,
     file_name: str,
     encryption_data: dict,
+    timestamp_data: dict,
     data: EvidenceCreate
 ) -> Evidence:
     """
@@ -39,6 +39,12 @@ async def save_evidence_metadata(
         evidence_activation=data.evidence_activation,
         file_path=encryption_data["file_path"],
         file_hash=encryption_data["hmac_hash"],
+        timestamp_token=timestamp_data["token_der"],
+        timestamp_authority=timestamp_data["authority"],
+        timestamp_status=timestamp_data["status"],
+        timestamp_hash_algorithm=timestamp_data["hash_algorithm"],
+        timestamp_message_imprint=timestamp_data["message_imprint"],
+        timestamp_nonce=timestamp_data["nonce"],
         description=data.description
     )
     db.add(evidence)
