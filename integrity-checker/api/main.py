@@ -123,4 +123,4 @@ def evidence_integrity_logs(evidence_id: int):
 
 @app.get("/health", summary="Health check")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "utc-fix-3"}
