@@ -235,6 +235,11 @@
 <script>
 function fmt(iso) {
   if (!iso) return '—';
+  // Date-only value (e.g. "2026-06-14") — show just the date, no fake 2 AM time
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return new Date(iso + 'T12:00:00Z').toLocaleDateString(undefined, { dateStyle: 'short' });
+  }
+  // Datetime: append Z if no timezone so JS treats it as UTC, not local
   if (!iso.endsWith('Z') && !iso.includes('+')) iso += 'Z';
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
 }

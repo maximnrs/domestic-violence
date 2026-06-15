@@ -4,15 +4,21 @@ import hashlib
 import base64
 import psycopg2
 import hvac
-from datetime import timezone
+from datetime import timezone, date as _date
 from minio import Minio
 from config import settings as config
 
 
 def _utc_iso(dt) -> str:
-    """Return an ISO-8601 string with explicit UTC offset, regardless of how psycopg2 returns the datetime."""
+    """Serialise a date or datetime from psycopg2 to an unambiguous ISO-8601 string.
+    plain date  → "YYYY-MM-DD"  (dashboard will show date only, no bogus 2 AM)
+    naive datetime → treated as UTC, returns "...Z"
+    aware datetime → converted to UTC,  returns "...Z"
+    """
     if dt is None:
         return None
+    if type(dt) is _date:
+        return dt.isoformat()
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
