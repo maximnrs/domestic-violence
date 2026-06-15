@@ -4,16 +4,18 @@ on:
   push:
     paths:
       - "backend/**"
+      - "docker-compose.integration.yml"
       - ".github/workflows/backend-tests.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "docker-compose.integration.yml"
       - ".github/workflows/backend-tests.yml"
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Run backend component tests
+  component-tests:
+    name: Backend component tests
     runs-on: ubuntu-latest
 
     defaults:
@@ -36,8 +38,42 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run tests
-        run: python -m pytest tests -v
+      - name: Validate Python files compile
+        run: python -m compileall app tests
+
+      - name: Validate app can be imported
+        run: python -c "from app.main import app"
+
+      - name: Run component tests
+        run: python -m pytest tests -v --ignore=tests/integration
+
+  integration-tests:
+    name: Docker-backed integration tests
+    runs-on: ubuntu-latest
+    needs: component-tests
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate integration Compose file
+        run: docker compose -f ../docker-compose.integration.yml config
 
       - name: Start integration services
         run: docker compose -f ../docker-compose.integration.yml up -d --wait
