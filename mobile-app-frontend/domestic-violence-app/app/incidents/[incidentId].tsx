@@ -22,6 +22,7 @@ import {
 } from '@/services/api';
 
 const WRITTEN_NOTE_TYPE_NAME = 'written_note';
+const VOICE_AUDIO_TYPE_NAME = 'audio';
 
 function formatIncidentType(type: IncidentResponse['incident_type']) {
   if (!type) {
@@ -152,6 +153,13 @@ export default function IncidentDetailScreen() {
   const writtenNoteTypeId = useMemo(
     () =>
       evidenceTypes.find((evidenceType) => evidenceType.type_name === WRITTEN_NOTE_TYPE_NAME)
+        ?.evidence_type_id ?? null,
+    [evidenceTypes]
+  );
+
+  const voiceAudioTypeId = useMemo(
+    () =>
+      evidenceTypes.find((evidenceType) => evidenceType.type_name === VOICE_AUDIO_TYPE_NAME)
         ?.evidence_type_id ?? null,
     [evidenceTypes]
   );
@@ -352,13 +360,17 @@ export default function IncidentDetailScreen() {
             {evidence.map((item) => {
               const isWrittenNote =
                 writtenNoteTypeId !== null && item.evidence_type_id === writtenNoteTypeId;
+              const isVoiceNote =
+                voiceAudioTypeId !== null && item.evidence_type_id === voiceAudioTypeId;
               const expanded = expandedEvidenceId === item.evidence_id;
               const noteContent = noteContentById[item.evidence_id];
               const noteError = noteErrorById[item.evidence_id];
               const typeName = evidenceTypeNameById[item.evidence_type_id];
               const evidenceTitle = isWrittenNote
                 ? 'Written note'
-                : item.file_name || 'Evidence item';
+                : isVoiceNote
+                  ? 'Voice note'
+                  : item.file_name || 'Evidence item';
 
               return (
                 <Pressable
@@ -368,7 +380,13 @@ export default function IncidentDetailScreen() {
                   style={styles.evidenceCard}>
                   <View style={styles.evidenceIcon}>
                     <Ionicons
-                      name={isWrittenNote ? 'document-text-outline' : 'document-outline'}
+                      name={
+                        isWrittenNote
+                          ? 'document-text-outline'
+                          : isVoiceNote
+                            ? 'mic-outline'
+                            : 'document-outline'
+                      }
                       size={22}
                       color="#1F5857"
                     />
@@ -388,7 +406,7 @@ export default function IncidentDetailScreen() {
                     <Text style={styles.evidenceMeta}>
                       {typeName ? `Type ${typeName}` : `Type ID #${item.evidence_type_id}`}
                     </Text>
-                    {isWrittenNote && item.file_name ? (
+                    {(isWrittenNote || isVoiceNote) && item.file_name ? (
                       <Text style={styles.evidenceMeta}>File {item.file_name}</Text>
                     ) : null}
                     {item.description ? (
