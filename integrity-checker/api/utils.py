@@ -4,8 +4,18 @@ import hashlib
 import base64
 import psycopg2
 import hvac
+from datetime import timezone
 from minio import Minio
 from config import settings as config
+
+
+def _utc_iso(dt) -> str:
+    """Return an ISO-8601 string with explicit UTC offset, regardless of how psycopg2 returns the datetime."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 # ── Vault ─────────────────────────────────────────────────────────────────────
@@ -98,10 +108,8 @@ def get_all_evidence(conn) -> list[dict]:
         rows = []
         for row in cur.fetchall():
             r = dict(zip(cols, row))
-            if r.get("created_at"):
-                r["created_at"] = r["created_at"].isoformat()
-            if r.get("hmac_verified_at"):
-                r["hmac_verified_at"] = r["hmac_verified_at"].isoformat()
+            r["created_at"] = _utc_iso(r.get("created_at"))
+            r["hmac_verified_at"] = _utc_iso(r.get("hmac_verified_at"))
             rows.append(r)
         return rows
 
@@ -129,10 +137,8 @@ def get_evidence_by_id(conn, evidence_id: int) -> dict | None:
         if not row:
             return None
         r = dict(zip(cols, row))
-        if r.get("created_at"):
-            r["created_at"] = r["created_at"].isoformat()
-        if r.get("hmac_verified_at"):
-            r["hmac_verified_at"] = r["hmac_verified_at"].isoformat()
+        r["created_at"] = _utc_iso(r.get("created_at"))
+        r["hmac_verified_at"] = _utc_iso(r.get("hmac_verified_at"))
         return r
 
 
@@ -168,7 +174,6 @@ def get_integrity_logs(conn, evidence_id: int = None) -> list[dict]:
         rows = []
         for row in cur.fetchall():
             r = dict(zip(cols, row))
-            if r.get("checked_at"):
-                r["checked_at"] = r["checked_at"].isoformat()
+            r["checked_at"] = _utc_iso(r.get("checked_at"))
             rows.append(r)
         return rows
