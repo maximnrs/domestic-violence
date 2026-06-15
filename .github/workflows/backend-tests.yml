@@ -85,7 +85,10 @@ jobs:
         run: docker compose -f ../docker-compose.integration.yml config
 
       - name: Start integration services
-        run: docker compose -f ../docker-compose.integration.yml up -d --wait
+        run: |
+          docker compose -f ../docker-compose.integration.yml up -d --wait postgres minio vault
+          docker compose -f ../docker-compose.integration.yml run --rm minio-init
+          docker compose -f ../docker-compose.integration.yml run --rm vault-init
 
       - name: Run Docker-backed integration tests
         env:
