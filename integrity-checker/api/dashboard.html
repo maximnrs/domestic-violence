@@ -235,6 +235,7 @@
 <script>
 function fmt(iso) {
   if (!iso) return '—';
+  if (!iso.endsWith('Z') && !iso.includes('+')) iso += 'Z';
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
 }
 
