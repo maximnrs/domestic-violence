@@ -27,6 +27,7 @@ async def encrypt_file(user_id: int, incident_id: int, file_bytes: bytes) -> dic
     )
     encryptor = cipher.encryptor()
     encrypted_data = encryptor.update(file_bytes) + encryptor.finalize()
+    tag = encryptor.tag  # GCM authentication tag (16 bytes)
 
     # Generate HMAC key and compute HMAC-SHA-256 of encrypted data
     hmac_key = os.urandom(32)
@@ -36,9 +37,9 @@ async def encrypt_file(user_id: int, incident_id: int, file_bytes: bytes) -> dic
     # Store both AES key and HMAC key in OpenBao
     key_reference = await vault.store_key(user_id, incident_id, file_id, aes_key, hmac_key)
 
-    # Upload encrypted file to MinIO
+    # Upload encrypted file + GCM tag to MinIO (tag appended as last 16 bytes)
     file_key = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}.bin"
-    file_path = await storage.upload_file(file_key, encrypted_data)
+    file_path = await storage.upload_file(file_key, encrypted_data + tag)
 
     return {
         "file_path": file_path,
@@ -47,3 +48,38 @@ async def encrypt_file(user_id: int, incident_id: int, file_bytes: bytes) -> dic
         "iv_nonce": base64.b64encode(iv).decode('utf-8'),
         "hmac_hash": hmac_hash
     }
+
+async def decrypt_file(evidence_id: int, file_path: str, iv_nonce: str) -> bytes:
+    """
+    Decrypt a file from MinIO using the key from OpenBao.
+    """
+    # Parse user_id, incident_id, and file_id from the file path
+    # path format: evidence/user_{user_id}/incident_{incident_id}/{uuid}.bin
+    parts = file_path.split('/')
+    user_id = int(parts[1].replace('user_', ''))
+    incident_id = int(parts[2].replace('incident_', ''))
+    file_id = parts[3].replace('.bin', '')
+
+    # Retrieve encrypted file from MinIO
+    encrypted_data_with_tag = await storage.download_file(file_path)
+
+    # Separate encrypted data and GCM tag (tag is always the last 16 bytes)
+    encrypted_data = encrypted_data_with_tag[:-16]
+    tag = encrypted_data_with_tag[-16:]
+
+    # Retrieve AES key from OpenBao
+    aes_key = await vault.retrieve_key(user_id, incident_id, file_id)
+
+    # Decode IV
+    iv = base64.b64decode(iv_nonce)
+
+    # Decrypt using AES-256-GCM
+    cipher = Cipher(
+        algorithms.AES(aes_key),
+        modes.GCM(iv, tag),
+        backend=default_backend()
+    )
+    decryptor = cipher.decryptor()
+    decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
+
+    return decrypted_data
