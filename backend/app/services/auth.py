@@ -9,6 +9,7 @@ from app.config import settings
 from app.core.database import get_db
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
+from app.models.case import Case
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
@@ -43,6 +44,16 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
         phone_number=data.phone_number,
     )
     db.add(user)
+    await db.flush()  # Get the user_id without committing yet
+
+    # Automatically create a default case for the new user
+    case = Case(
+        user_id=user.user_id,
+        case_title=f"My Case",
+        description="Default case created on registration",
+        status="open"
+    )
+    db.add(case)
     await db.commit()
     await db.refresh(user)
     return user
