@@ -1,8 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from app.models.schemas import EvidenceCreate
 from app.models.evidence import Evidence
-from app.models.encryption import Encryption
 from app.services import encryption, metadata, auditlog
 from app.services.ports import (
     AuditLogger,
@@ -24,11 +22,16 @@ async def upload_evidence(
     audit_logger: AuditLogger | None = None,
     timestamp_client: TimestampClient | None = None,
 ) -> Evidence:
+    encryption_service = encryption_service or encryption
+    metadata_repository = metadata_repository or metadata
+    audit_logger = audit_logger or auditlog
+    timestamp_client = timestamp_client or timestamp
+
     # Step 1: Encrypt the file
-    encryption_data = await encryption.encrypt_file(user_id, incident_id, file_bytes)
+    encryption_data = await encryption_service.encrypt_file(user_id, incident_id, file_bytes)
 
     # Step 2: Get a timestamp
-    ts_data = await timestamp.request_timestamp()
+    await timestamp_client.request_timestamp()
 
     # Step 3: Save metadata to database
     evidence = await metadata_repository.save_evidence_metadata(
@@ -63,26 +66,25 @@ async def download_evidence(
     metadata_repository: MetadataRepository | None = None,
     audit_logger: AuditLogger | None = None,
 ) -> bytes:
+    encryption_service = encryption_service or encryption
+    metadata_repository = metadata_repository or metadata
+    audit_logger = audit_logger or auditlog
+
     # Step 1: Verify ownership
-    evidence = await metadata.get_evidence(db, evidence_id, user_id)
+    evidence = await metadata_repository.get_evidence(db, evidence_id, user_id)
 
     # Step 2: Get the encryption record for this evidence
-    result = await db.execute(
-        select(Encryption).where(Encryption.evidence_id == evidence_id)
-    )
-    enc = result.scalar_one_or_none()
-    if not enc:
-        raise ValueError("Encryption record not found for this evidence")
+    enc = await metadata_repository.get_evidence_encryption(db, evidence_id)
 
     # Step 3: Decrypt the file using the file_path and IV from the encryption record
-    decrypted_bytes = await encryption.decrypt_file(
-        evidence_id,
+    decrypted_bytes = await encryption_service.decrypt_file(
         evidence.file_path,
+        enc.aes_key_reference,
         enc.iv_nonce
     )
 
     # Step 4: Log the download
-    await auditlog.log_action(
+    await audit_logger.log_action(
         db,
         user_id=user_id,
         case_id=None,
@@ -103,9 +105,12 @@ async def delete_evidence(
     metadata_repository: MetadataRepository | None = None,
     audit_logger: AuditLogger | None = None,
 ):
-    evidence = await metadata.get_evidence(db, evidence_id, user_id)
+    metadata_repository = metadata_repository or metadata
+    audit_logger = audit_logger or auditlog
 
-    await auditlog.log_action(
+    evidence = await metadata_repository.get_evidence(db, evidence_id, user_id)
+
+    await audit_logger.log_action(
         db,
         user_id=user_id,
         case_id=None,

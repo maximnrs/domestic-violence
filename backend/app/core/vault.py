@@ -45,6 +45,22 @@ async def retrieve_key(user_id: int, incident_id: int, file_id: str) -> bytes:
     except Exception as e:
         raise ValueError(f"Failed to retrieve key from OpenBao: {str(e)}")
 
+async def retrieve_key_by_reference(key_reference: str) -> bytes:
+    """
+    Retrieve the AES key from an OpenBao key reference.
+    """
+    parts = key_reference.split("/")
+    if len(parts) != 4:
+        raise ValueError("Invalid OpenBao key reference")
+
+    try:
+        user_id = int(parts[1].replace("user_", ""))
+        incident_id = int(parts[2].replace("incident_", ""))
+    except ValueError as e:
+        raise ValueError("Invalid OpenBao key reference") from e
+
+    return await retrieve_key(user_id, incident_id, parts[3])
+
 async def retrieve_hmac_key(user_id: int, incident_id: int, file_id: str) -> bytes:
     """
     Retrieve the HMAC key from OpenBao.

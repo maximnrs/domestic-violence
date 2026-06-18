@@ -23,7 +23,6 @@ async def encrypt_file(
     Encrypt a file with AES-256-GCM and store both the AES key
     and HMAC key in OpenBao.
     """
-    key_store = key_store or vault.VaultKeyStore()
     object_storage = object_storage or storage.S3ObjectStorage()
 
     # Generate a unique ID for this file
@@ -49,12 +48,21 @@ async def encrypt_file(
     h = hmac.new(hmac_key, encrypted_data, hashlib.sha256)
     hmac_hash = h.hexdigest()
 
-    # Store both AES key and HMAC key in OpenBao
-    key_reference = await vault.store_key(user_id, incident_id, file_id, aes_key, hmac_key)
+    if key_store is None:
+        # Store both AES key and HMAC key in OpenBao in production.
+        key_reference = await vault.store_key(
+            user_id,
+            incident_id,
+            file_id,
+            aes_key,
+            hmac_key,
+        )
+    else:
+        key_reference = await key_store.store_key(user_id, incident_id, file_id, aes_key)
 
     # Upload encrypted file + GCM tag to MinIO (tag appended as last 16 bytes)
     file_key = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}.bin"
-    file_path = await storage.upload_file(file_key, encrypted_data + tag)
+    file_path = await object_storage.upload_file(file_key, encrypted_data + tag)
 
     return {
         "file_path": file_path,
@@ -64,31 +72,36 @@ async def encrypt_file(
         "hmac_hash": hmac_hash
     }
 
-async def decrypt_file(evidence_id: int, file_path: str, iv_nonce: str) -> bytes:
+async def decrypt_file(
+    file_path: str,
+    key_reference: str,
+    iv_nonce: str,
+    key_store: KeyStore | None = None,
+    object_storage: ObjectStorage | None = None,
+) -> bytes:
     """
-    Decrypt a file from MinIO using the key from OpenBao.
+    Decrypt a file from object storage using the key reference.
     """
-    # Parse user_id, incident_id, and file_id from the file path
-    # path format: evidence/user_{user_id}/incident_{incident_id}/{uuid}.bin
-    parts = file_path.split('/')
-    user_id = int(parts[1].replace('user_', ''))
-    incident_id = int(parts[2].replace('incident_', ''))
-    file_id = parts[3].replace('.bin', '')
+    object_storage = object_storage or storage.S3ObjectStorage()
 
     # Retrieve encrypted file from MinIO
-    encrypted_data_with_tag = await storage.download_file(file_path)
+    encrypted_data_with_tag = await object_storage.download_file(file_path)
 
     # Separate encrypted data and GCM tag (tag is always the last 16 bytes)
     encrypted_data = encrypted_data_with_tag[:-16]
     tag = encrypted_data_with_tag[-16:]
 
     # Retrieve AES key from OpenBao
-    aes_key = await vault.retrieve_key(user_id, incident_id, file_id)
+    if key_store is None:
+        aes_key = await vault.retrieve_key_by_reference(key_reference)
+    else:
+        aes_key = await key_store.retrieve_key_by_reference(key_reference)
 
     # Decode IV
     iv = base64.b64decode(iv_nonce)
 
     # Decrypt using AES-256-GCM
+    Cipher, algorithms, modes, default_backend = get_cipher_dependencies()
     cipher = Cipher(
         algorithms.AES(aes_key),
         modes.GCM(iv, tag),
