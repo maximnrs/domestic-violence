@@ -1,5 +1,7 @@
-import hvac
 import base64
+
+import hvac
+
 from app.config import settings
 
 client = hvac.Client(

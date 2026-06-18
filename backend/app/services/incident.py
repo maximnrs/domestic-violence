@@ -28,8 +28,8 @@ async def create_incident(db: AsyncSession, user_id: int, data: IncidentCreate) 
     await db.refresh(incident)
     return incident
 
-async def get_incidents(db: AsyncSession, user_id: int, case_id: int) -> list[Incident]:
-    await verify_case_ownership(db, case_id, user_id)
+async def get_incidents(db: AsyncSession, case_id: int) -> list[Incident]:
+    await verify_case_ownership(db, case_id)
     result = await db.execute(
         select(Incident).where(Incident.case_id == case_id)
     )

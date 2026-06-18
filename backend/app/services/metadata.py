@@ -73,6 +73,18 @@ async def get_evidence(db: AsyncSession, evidence_id: int, user_id: int) -> Evid
         raise ValueError("Evidence not found or access denied")
     return evidence
 
+async def get_evidence_encryption(db: AsyncSession, evidence_id: int) -> Encryption:
+    """
+    Get encryption metadata for an evidence record.
+    """
+    result = await db.execute(
+        select(Encryption).where(Encryption.evidence_id == evidence_id)
+    )
+    encryption = result.scalar_one_or_none()
+    if not encryption:
+        raise ValueError("Evidence encryption metadata not found")
+    return encryption
+
 async def get_incident_evidence(db: AsyncSession, incident_id: int, user_id: int) -> list[Evidence]:
     """
     Get all evidence for an incident, ensuring user ownership.

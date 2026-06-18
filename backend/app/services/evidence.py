@@ -4,6 +4,12 @@ from app.models.schemas import EvidenceCreate
 from app.models.evidence import Evidence
 from app.models.encryption import Encryption
 from app.services import encryption, metadata, auditlog
+from app.services.ports import (
+    AuditLogger,
+    EncryptionService,
+    MetadataRepository,
+    TimestampClient,
+)
 from app.core import timestamp
 
 async def upload_evidence(
@@ -12,7 +18,11 @@ async def upload_evidence(
     incident_id: int,
     file_name: str,
     file_bytes: bytes,
-    data: EvidenceCreate
+    data: EvidenceCreate,
+    encryption_service: EncryptionService | None = None,
+    metadata_repository: MetadataRepository | None = None,
+    audit_logger: AuditLogger | None = None,
+    timestamp_client: TimestampClient | None = None,
 ) -> Evidence:
     # Step 1: Encrypt the file
     encryption_data = await encryption.encrypt_file(user_id, incident_id, file_bytes)
@@ -21,7 +31,7 @@ async def upload_evidence(
     ts_data = await timestamp.request_timestamp()
 
     # Step 3: Save metadata to database
-    evidence = await metadata.save_evidence_metadata(
+    evidence = await metadata_repository.save_evidence_metadata(
         db,
         user_id,
         incident_id,
@@ -31,7 +41,7 @@ async def upload_evidence(
     )
 
     # Step 4: Write audit log
-    await auditlog.log_action(
+    await audit_logger.log_action(
         db,
         user_id=user_id,
         case_id=None,
@@ -48,7 +58,10 @@ async def upload_evidence(
 async def download_evidence(
     db: AsyncSession,
     user_id: int,
-    evidence_id: int
+    evidence_id: int,
+    encryption_service: EncryptionService | None = None,
+    metadata_repository: MetadataRepository | None = None,
+    audit_logger: AuditLogger | None = None,
 ) -> bytes:
     # Step 1: Verify ownership
     evidence = await metadata.get_evidence(db, evidence_id, user_id)
@@ -86,7 +99,9 @@ async def download_evidence(
 async def delete_evidence(
     db: AsyncSession,
     user_id: int,
-    evidence_id: int
+    evidence_id: int,
+    metadata_repository: MetadataRepository | None = None,
+    audit_logger: AuditLogger | None = None,
 ):
     evidence = await metadata.get_evidence(db, evidence_id, user_id)
 

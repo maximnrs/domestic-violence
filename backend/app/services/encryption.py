@@ -3,15 +3,29 @@ import base64
 import hmac
 import hashlib
 import uuid
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
 from app.core import vault, storage
+from app.services.ports import KeyStore, ObjectStorage
 
-async def encrypt_file(user_id: int, incident_id: int, file_bytes: bytes) -> dict:
+def get_cipher_dependencies():
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    return Cipher, algorithms, modes, default_backend
+
+async def encrypt_file(
+    user_id: int,
+    incident_id: int,
+    file_bytes: bytes,
+    key_store: KeyStore | None = None,
+    object_storage: ObjectStorage | None = None,
+) -> dict:
     """
     Encrypt a file with AES-256-GCM and store both the AES key
     and HMAC key in OpenBao.
     """
+    key_store = key_store or vault.VaultKeyStore()
+    object_storage = object_storage or storage.S3ObjectStorage()
+
     # Generate a unique ID for this file
     file_id = str(uuid.uuid4())
 
@@ -20,6 +34,7 @@ async def encrypt_file(user_id: int, incident_id: int, file_bytes: bytes) -> dic
     iv = os.urandom(16)
 
     # Encrypt using AES-256-GCM
+    Cipher, algorithms, modes, default_backend = get_cipher_dependencies()
     cipher = Cipher(
         algorithms.AES(aes_key),
         modes.GCM(iv),

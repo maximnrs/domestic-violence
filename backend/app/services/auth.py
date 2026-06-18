@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User
+from app.models.case import Case
 from app.models.schemas import UserCreate
 from passlib.context import CryptContext
 from jose import jwt, JWTError
