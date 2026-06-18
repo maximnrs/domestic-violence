@@ -73,7 +73,7 @@ def reset_database():
                     INSERT INTO evidencetype (evidence_type_id, type_name, description)
                     VALUES
                       (1, 'written_note', 'Written text note'),
-                      (2, 'voice_audio', 'Voice or audio recording')
+                      (2, 'audio', 'Voice or audio recording')
                     """
                 )
             )

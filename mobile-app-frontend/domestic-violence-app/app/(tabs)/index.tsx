@@ -80,6 +80,10 @@ export default function HomeScreen() {
   }, [welcomeBack]);
 
   function handleCapturePress(title: string) {
+    if (title === 'Voice\nNote') {
+      router.push('/voice-note' as Href);
+    }
+
     if (title === 'Written\nNote') {
       router.push('/written-note' as Href);
     }
