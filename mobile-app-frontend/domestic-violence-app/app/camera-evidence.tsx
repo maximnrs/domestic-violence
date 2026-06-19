@@ -43,7 +43,6 @@ export default function CameraEvidenceScreen() {
 
   async function handleCapture() {
     if (!cameraRef.current || !cameraReady) {
-      console.log('Camera not ready yet');
       return;
     }
 
@@ -61,7 +60,6 @@ export default function CameraEvidenceScreen() {
         await startRecording();
       }
     } catch (error) {
-      console.log('Capture error:', error);
     } finally {
       setIsCapturing(false);
     }
@@ -69,13 +67,10 @@ export default function CameraEvidenceScreen() {
 
   async function startRecording() {
     if (!cameraRef.current || !cameraReady) {
-      console.log('Camera not ready for recording');
       return;
     }
 
     try {
-      console.log('Starting recording');
-
       setIsRecording(true);
 
       const video = await cameraRef.current.recordAsync({
@@ -83,13 +78,10 @@ export default function CameraEvidenceScreen() {
       });
 
       if (video?.uri) {
-        console.log('Video saved:', video.uri);
-
         setVideoUri(video.uri);
         setPhotoUri(null);
       }
     } catch (error) {
-      console.log('Video recording error:', error);
     } finally {
       setIsRecording(false);
     }
@@ -97,8 +89,6 @@ export default function CameraEvidenceScreen() {
 
   function stopRecording() {
     if (!cameraRef.current) return;
-
-    console.log('Stopping recording');
 
     cameraRef.current.stopRecording();
   }
@@ -239,7 +229,6 @@ export default function CameraEvidenceScreen() {
                   facing="back"
                   mode={mode}
                   onCameraReady={() => {
-                    console.log('Camera ready');
                     setCameraReady(true);
                   }}
                 />
