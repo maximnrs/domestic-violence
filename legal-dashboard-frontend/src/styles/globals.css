@@ -39,6 +39,15 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
+.icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .dashboard-shell {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
@@ -75,8 +84,6 @@ button {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.92);
   color: var(--deep-teal);
-  font-weight: 800;
-  font-size: 24px;
 }
 
 .brand-lockup strong {
@@ -116,14 +123,6 @@ button {
   background: rgba(168, 197, 184, 0.16);
   border-color: rgba(255, 255, 255, 0.1);
   color: #ffffff;
-}
-
-.nav-icon {
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid currentColor;
-  border-radius: 4px;
-  opacity: 0.88;
 }
 
 .sidebar-user {
@@ -197,7 +196,7 @@ button {
   background: var(--surface);
 }
 
-.search-box span {
+.search-box .icon {
   color: var(--muted);
 }
 
@@ -210,13 +209,14 @@ button {
 }
 
 .icon-button {
+  display: grid;
+  place-items: center;
   width: 40px;
   height: 40px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--deep-teal);
   background: var(--surface);
-  font-weight: 700;
 }
 
 .officer-chip,
@@ -281,37 +281,15 @@ button {
 
 .stat-icon,
 .case-folder {
-  position: relative;
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
   width: 48px;
   height: 48px;
   border-radius: 50%;
   background: rgba(127, 168, 156, 0.22);
   border: 1px solid rgba(127, 168, 156, 0.36);
-}
-
-.stat-icon::after,
-.case-folder::after,
-.shield-mark::after {
-  content: "";
-  position: absolute;
-  inset: 13px;
-  border: 2px solid var(--deep-teal);
-  border-radius: 4px;
-}
-
-.stat-calendar::after {
-  border-color: #2f73c8;
-}
-
-.stat-check::after,
-.shield-mark::after {
-  border-radius: 50%;
-}
-
-.stat-report::after {
-  border-color: #2f73c8;
-  border-radius: 2px;
+  color: var(--deep-teal);
 }
 
 .table-shell {
@@ -356,8 +334,10 @@ tbody tr.selected-row {
 .row-action {
   width: 36px;
   color: var(--deep-teal);
-  text-align: right;
-  font-size: 20px;
+}
+
+.row-action .icon {
+  margin-left: auto;
 }
 
 .table-footer {
@@ -388,6 +368,10 @@ tbody tr.selected-row {
 .pagination button.active {
   background: var(--deep-teal);
   color: #ffffff;
+}
+
+.pagination button:disabled {
+  opacity: 0.45;
 }
 
 .badge {
@@ -590,10 +574,12 @@ tbody tr.selected-row {
 }
 
 .shield-mark {
-  position: relative;
+  display: grid;
+  place-items: center;
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
+  color: var(--deep-teal);
 }
 
 .report-shell {
