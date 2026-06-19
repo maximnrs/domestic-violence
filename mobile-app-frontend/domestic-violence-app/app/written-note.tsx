@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router, type Href } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -16,172 +16,50 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  createIncident,
-  getEvidenceTypes,
-  getCases,
-  listIncidents,
-  uploadEvidence,
-  type CaseResponse,
-  type EvidenceTypeResponse,
-  type IncidentResponse,
-  type IncidentType,
-} from '@/services/api';
+import { IncidentPicker } from '@/components/evidence/IncidentPicker';
+import { uploadEvidence } from '@/services/api';
+import { useEvidenceCaptureContext } from '@/hooks/use-evidence-capture-context';
 
 const WRITTEN_NOTE_TYPE_NAME = 'written_note';
 
-const incidentTypes: IncidentType[] = [
-  'other',
-  'verbal',
-  'physical',
-  'psychological',
-  'financial',
-  'sexual',
-  'stalking',
-];
-
-function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatIncidentType(type: IncidentResponse['incident_type']) {
-  if (!type) {
-    return 'Incident';
-  }
-
-  return `${type.charAt(0).toUpperCase()}${type.slice(1)} incident`;
-}
-
-function formatIncidentMeta(incident: IncidentResponse) {
-  const date = incident.incident_date ?? incident.creation_date;
-  const time = incident.incident_time ? ` - ${incident.incident_time.slice(0, 5)}` : '';
-  return `${date}${time}`;
-}
-
-function normalizeOptional(value: string) {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeTime(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  if (/^\d{2}:\d{2}$/.test(trimmed)) {
-    return `${trimmed}:00`;
-  }
-
-  if (/^\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  throw new Error('Use HH:mm for incident time.');
-}
-
-type StatusPanelProps = {
-  actionLabel?: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  message: string;
-  onAction?: () => void;
-  title: string;
-};
-
-function StatusPanel({ actionLabel, icon, message, onAction, title }: StatusPanelProps) {
-  return (
-    <View style={styles.statusPanel}>
-      <View style={styles.statusIcon}>
-        <Ionicons name={icon} size={23} color="#1F5857" />
-      </View>
-      <Text style={styles.statusTitle}>{title}</Text>
-      <Text style={styles.statusMessage}>{message}</Text>
-      {onAction && actionLabel ? (
-        <Pressable accessibilityRole="button" onPress={onAction} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>{actionLabel}</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
 export default function WrittenNoteScreen() {
-  const [caseInfo, setCaseInfo] = useState<CaseResponse | null>(null);
-  const [incidents, setIncidents] = useState<IncidentResponse[]>([]);
-  const [evidenceTypes, setEvidenceTypes] = useState<EvidenceTypeResponse[]>([]);
-  const [selectedIncidentId, setSelectedIncidentId] = useState<number | null>(null);
+  const {
+    contextError,
+    handleCreateIncident: createIncidentForEvidence,
+    incidentError,
+    incidents,
+    isContextLoading,
+    isCreatingIncident,
+    isIncidentLoading,
+    loadContext,
+    newIncidentDate,
+    newIncidentDescription,
+    newIncidentLocation,
+    newIncidentTime,
+    newIncidentType,
+    refreshEvidenceTypes,
+    resolveEvidenceTypeId,
+    selectedIncident,
+    selectedIncidentId,
+    selectIncident,
+    setIncidentError,
+    setNewIncidentDate,
+    setNewIncidentDescription,
+    setNewIncidentLocation,
+    setNewIncidentTime,
+    setNewIncidentType,
+    setTypeError,
+    showCreateIncident,
+    toggleCreateIncident,
+    typeError,
+  } = useEvidenceCaptureContext();
   const [noteText, setNoteText] = useState('');
-  const [contextError, setContextError] = useState<string | null>(null);
-  const [incidentError, setIncidentError] = useState<string | null>(null);
-  const [typeError, setTypeError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [isContextLoading, setIsContextLoading] = useState(true);
-  const [isIncidentLoading, setIsIncidentLoading] = useState(false);
-  const [isCreatingIncident, setIsCreatingIncident] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showCreateIncident, setShowCreateIncident] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  const [newIncidentDate, setNewIncidentDate] = useState(todayIsoDate);
-  const [newIncidentTime, setNewIncidentTime] = useState('');
-  const [newIncidentLocation, setNewIncidentLocation] = useState('');
-  const [newIncidentDescription, setNewIncidentDescription] = useState('');
-  const [newIncidentType, setNewIncidentType] = useState<IncidentType>('other');
-
-  const selectedIncident = useMemo(
-    () => incidents.find((incident) => incident.incident_id === selectedIncidentId) ?? null,
-    [incidents, selectedIncidentId]
-  );
 
   const hasUnsavedText = noteText.trim().length > 0;
-
-  const loadContext = useCallback(async () => {
-    setIsContextLoading(true);
-    setContextError(null);
-    setIncidentError(null);
-    setTypeError(null);
-    setCaseInfo(null);
-    setIncidents([]);
-    setSelectedIncidentId(null);
-
-    const [caseResult, typeResult] = await Promise.allSettled([getCases(), getEvidenceTypes()]);
-
-    if (typeResult.status === 'fulfilled') {
-      setEvidenceTypes(typeResult.value);
-    } else {
-      setEvidenceTypes([]);
-      setTypeError(
-        typeResult.reason instanceof Error
-          ? typeResult.reason.message
-          : 'Unable to load evidence types.'
-      );
-    }
-
-    if (caseResult.status === 'rejected') {
-      setContextError(
-        caseResult.reason instanceof Error ? caseResult.reason.message : 'Unable to load your case.'
-      );
-      setIsContextLoading(false);
-      return;
-    }
-
-    const currentCase = caseResult.value[0];
-    setCaseInfo(currentCase);
-    setIsContextLoading(false);
-    setIsIncidentLoading(true);
-
-    try {
-      const nextIncidents = await listIncidents(currentCase.case_id);
-      setIncidents(nextIncidents);
-      setSelectedIncidentId(nextIncidents[0]?.incident_id ?? null);
-      setShowCreateIncident(nextIncidents.length === 0);
-    } catch (error) {
-      setIncidentError(error instanceof Error ? error.message : 'Unable to load incidents.');
-    } finally {
-      setIsIncidentLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     loadContext();
@@ -205,62 +83,15 @@ export default function WrittenNoteScreen() {
     return () => subscription.remove();
   }, [handleExit]);
 
-  async function refreshEvidenceTypes() {
-    const nextTypes = await getEvidenceTypes();
-    setEvidenceTypes(nextTypes);
-    setTypeError(null);
-    return nextTypes;
-  }
-
   async function resolveWrittenNoteTypeId() {
-    const types = evidenceTypes.length > 0 ? evidenceTypes : await refreshEvidenceTypes();
-    const writtenNoteType = types.find((type) => type.type_name === WRITTEN_NOTE_TYPE_NAME);
-
-    if (!writtenNoteType) {
-      throw new Error('Written note evidence configuration is missing on the server.');
-    }
-
-    return writtenNoteType.evidence_type_id;
+    return resolveEvidenceTypeId(WRITTEN_NOTE_TYPE_NAME, 'Written note');
   }
 
   async function handleCreateIncident() {
-    if (!caseInfo) {
-      setIncidentError('Your case must load before an incident can be created.');
-      return;
-    }
-
-    setIncidentError(null);
     setSuccessMessage(null);
-
-    if (newIncidentDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(newIncidentDate.trim())) {
-      setIncidentError('Use YYYY-MM-DD for incident date.');
-      return;
-    }
-
-    try {
-      setIsCreatingIncident(true);
-      const createdIncident = await createIncident({
-        case_id: caseInfo.case_id,
-        incident_date: normalizeOptional(newIncidentDate),
-        incident_time: normalizeTime(newIncidentTime),
-        location: normalizeOptional(newIncidentLocation),
-        incident_type: newIncidentType,
-        description: normalizeOptional(newIncidentDescription),
-      });
-
-      setIncidents((current) => [createdIncident, ...current]);
-      setSelectedIncidentId(createdIncident.incident_id);
-      setShowCreateIncident(false);
-      setNewIncidentDate(todayIsoDate());
-      setNewIncidentTime('');
-      setNewIncidentLocation('');
-      setNewIncidentDescription('');
-      setNewIncidentType('other');
+    const createdIncident = await createIncidentForEvidence();
+    if (createdIncident) {
       setSuccessMessage('Incident ready. Your note is still here.');
-    } catch (error) {
-      setIncidentError(error instanceof Error ? error.message : 'Unable to create incident.');
-    } finally {
-      setIsCreatingIncident(false);
     }
   }
 
@@ -388,190 +219,35 @@ export default function WrittenNoteScreen() {
             />
           </View>
 
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>INCIDENT</Text>
-            <Pressable accessibilityRole="button" onPress={loadContext}>
-              <Ionicons name="refresh" size={19} color="#79908E" />
-            </Pressable>
-          </View>
-
-          {isContextLoading ? (
-            <View style={styles.inlineLoading}>
-              <ActivityIndicator color="#1F5857" />
-              <Text style={styles.loadingText}>Loading your case...</Text>
-            </View>
-          ) : null}
-
-          {!isContextLoading && contextError ? (
-            <StatusPanel
-              actionLabel="Try again"
-              icon="alert-circle-outline"
-              message={contextError}
-              onAction={loadContext}
-              title="Case unavailable"
-            />
-          ) : null}
-
-          {typeError ? (
-            <StatusPanel
-              actionLabel="Retry"
-              icon="warning-outline"
-              message={typeError}
-              onAction={refreshEvidenceTypes}
-              title="Evidence setup unavailable"
-            />
-          ) : null}
-
-          {isIncidentLoading ? (
-            <View style={styles.inlineLoading}>
-              <ActivityIndicator color="#1F5857" />
-              <Text style={styles.loadingText}>Loading incidents...</Text>
-            </View>
-          ) : null}
-
-          {incidentError ? (
-            <StatusPanel
-              actionLabel="Try again"
-              icon="warning-outline"
-              message={incidentError}
-              onAction={loadContext}
-              title="Incident unavailable"
-            />
-          ) : null}
-
-          {!isContextLoading && !contextError && incidents.length > 0 ? (
-            <View style={styles.incidentList}>
-              {incidents.map((incident) => {
-                const selected = incident.incident_id === selectedIncidentId;
-
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={incident.incident_id}
-                    onPress={() => {
-                      setSelectedIncidentId(incident.incident_id);
-                      setShowCreateIncident(false);
-                      setSubmitError(null);
-                    }}
-                    style={[styles.incidentCard, selected ? styles.incidentCardSelected : null]}>
-                    <View style={styles.incidentIcon}>
-                      <Ionicons
-                        name={selected ? 'checkmark-circle' : 'folder-outline'}
-                        size={22}
-                        color="#1F5857"
-                      />
-                    </View>
-                    <View style={styles.incidentText}>
-                      <Text style={styles.incidentMeta}>{formatIncidentMeta(incident)}</Text>
-                      <Text style={styles.incidentTitle}>
-                        {formatIncidentType(incident.incident_type)}
-                      </Text>
-                      {incident.location ? (
-                        <Text style={styles.incidentDetail}>{incident.location}</Text>
-                      ) : null}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-
-          {!isContextLoading && !contextError ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                setShowCreateIncident((current) => !current);
-                setIncidentError(null);
-              }}
-              style={styles.newIncidentToggle}>
-              <Ionicons name="add-circle-outline" size={19} color="#1F5857" />
-              <Text style={styles.newIncidentToggleText}>
-                {showCreateIncident ? 'Hide new incident' : 'Create new incident'}
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {showCreateIncident && !contextError ? (
-            <View style={styles.createCard}>
-              <Text style={styles.createTitle}>New incident</Text>
-              <Text style={styles.inputLabel}>Date</Text>
-              <TextInput
-                onChangeText={setNewIncidentDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#9BA6A4"
-                style={styles.input}
-                value={newIncidentDate}
-              />
-              <Text style={styles.inputLabel}>Time</Text>
-              <TextInput
-                onChangeText={setNewIncidentTime}
-                placeholder="HH:mm"
-                placeholderTextColor="#9BA6A4"
-                style={styles.input}
-                value={newIncidentTime}
-              />
-              <Text style={styles.inputLabel}>Type</Text>
-              <View style={styles.typeGrid}>
-                {incidentTypes.map((type) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={type}
-                    onPress={() => setNewIncidentType(type)}
-                    style={[
-                      styles.typeChip,
-                      newIncidentType === type ? styles.typeChipSelected : null,
-                    ]}>
-                    <Text
-                      style={[
-                        styles.typeChipText,
-                        newIncidentType === type ? styles.typeChipTextSelected : null,
-                      ]}>
-                      {type}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={styles.inputLabel}>Location</Text>
-              <TextInput
-                onChangeText={setNewIncidentLocation}
-                placeholder="Optional"
-                placeholderTextColor="#9BA6A4"
-                style={styles.input}
-                value={newIncidentLocation}
-              />
-              <Text style={styles.inputLabel}>Description</Text>
-              <TextInput
-                multiline
-                onChangeText={setNewIncidentDescription}
-                placeholder="Optional"
-                placeholderTextColor="#9BA6A4"
-                style={[styles.input, styles.descriptionInput]}
-                textAlignVertical="top"
-                value={newIncidentDescription}
-              />
-              <Pressable
-                accessibilityRole="button"
-                disabled={isCreatingIncident}
-                onPress={handleCreateIncident}
-                style={[styles.primaryButton, isCreatingIncident ? styles.buttonDisabled : null]}>
-                {isCreatingIncident ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Create incident</Text>
-                )}
-              </Pressable>
-            </View>
-          ) : null}
-
-          {selectedIncident ? (
-            <View style={styles.selectedPanel}>
-              <Ionicons name="checkmark-circle" size={20} color="#1F5857" />
-              <View style={styles.selectedText}>
-                <Text style={styles.selectedLabel}>Selected incident</Text>
-                <Text style={styles.selectedTitle}>{formatIncidentType(selectedIncident.incident_type)}</Text>
-              </View>
-            </View>
-          ) : null}
+          <IncidentPicker
+            contextError={contextError}
+            incidentError={incidentError}
+            incidents={incidents}
+            isContextLoading={isContextLoading}
+            isCreatingIncident={isCreatingIncident}
+            isIncidentLoading={isIncidentLoading}
+            loadContext={loadContext}
+            newIncidentDate={newIncidentDate}
+            newIncidentDescription={newIncidentDescription}
+            newIncidentLocation={newIncidentLocation}
+            newIncidentTime={newIncidentTime}
+            newIncidentType={newIncidentType}
+            onCreateIncident={handleCreateIncident}
+            onIncidentSelected={() => setSubmitError(null)}
+            refreshEvidenceTypes={refreshEvidenceTypes}
+            selectedIncident={selectedIncident}
+            selectedIncidentId={selectedIncidentId}
+            selectIncident={selectIncident}
+            setIncidentError={setIncidentError}
+            setNewIncidentDate={setNewIncidentDate}
+            setNewIncidentDescription={setNewIncidentDescription}
+            setNewIncidentLocation={setNewIncidentLocation}
+            setNewIncidentTime={setNewIncidentTime}
+            setNewIncidentType={setNewIncidentType}
+            showCreateIncident={showCreateIncident}
+            toggleCreateIncident={toggleCreateIncident}
+            typeError={typeError}
+          />
 
           {submitError ? (
             <Text accessibilityLiveRegion="polite" style={styles.errorText}>

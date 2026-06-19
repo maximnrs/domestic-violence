@@ -22,23 +22,47 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      sh -c "
+        until mc alias set local http://minio:9000 test-access-key test-secret-key; do
+          echo 'Waiting for MinIO...';
+          sleep 2;
+        done;
+        mc mb local/evidence-test --ignore-existing;
+      "
+
+  vault:
+    image: ghcr.io/openbao/openbao:latest
+    cap_add:
+      - IPC_LOCK
+    environment:
+      OPENBAO_DEV_ROOT_TOKEN_ID: test-token
+      OPENBAO_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    command: server -dev -dev-root-token-id=test-token
+    ports:
+      - "8200:8200"
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "bao", "status", "-address=http://127.0.0.1:8200"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  vault:
-    image: hashicorp/vault:1.19
-    cap_add:
-      - IPC_LOCK
+  vault-init:
+    image: ghcr.io/openbao/openbao:latest
+    depends_on:
+      vault:
+        condition: service_healthy
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: test-token
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
-    ports:
-      - "8200:8200"
-    healthcheck:
-      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      BAO_ADDR: http://vault:8200
+      BAO_TOKEN: test-token
+    entrypoint: >
+      sh -c "
+        bao secrets enable -path=evidence kv-v2 || true;
+        exit 0
+      "
