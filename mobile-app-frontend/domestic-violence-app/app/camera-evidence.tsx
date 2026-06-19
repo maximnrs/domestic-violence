@@ -17,8 +17,38 @@ import {
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 export default function CameraEvidenceScreen() {
+  const cameraRef = useRef<CameraView>(null);
+
   const [permission, requestPermission] = useCameraPermissions();
+
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [contextText, setContextText] = useState('');
+  const [isCapturing, setIsCapturing] = useState(false);
+
+  async function capturePhoto() {
+    if (!cameraRef.current) return;
+
+    try {
+      setIsCapturing(true);
+
+      const photo = await cameraRef.current.takePictureAsync();
+
+      if (photo?.uri) {
+        setPhotoUri(photo.uri);
+      }
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setIsCapturing(false);
+    }
+  }
+
+  function retakePhoto() {
+    setPhotoUri(null);
+  }
+
   if (!permission) {
     return null;
   }
