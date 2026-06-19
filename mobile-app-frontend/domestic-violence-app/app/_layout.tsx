@@ -41,7 +41,9 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="bloom" />
+        <Stack.Screen name="camera-evidence" options={{ headerShown: false, }} />
         <Stack.Screen name="written-note" />
+        <Stack.Screen name="voice-note" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         <Stack.Screen name="appearance" options={{ presentation: 'card', title: 'Appearance' }}/>
       </Stack>

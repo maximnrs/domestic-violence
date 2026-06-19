@@ -132,7 +132,7 @@ def test_evidence_type_lookup_returns_persisted_types(monkeypatch):
                 ),
                 SimpleNamespace(
                     evidence_type_id=2,
-                    type_name="voice_audio",
+                    type_name="audio",
                     description="Voice or audio recording",
                 ),
             ]
@@ -150,7 +150,7 @@ def test_evidence_type_lookup_returns_persisted_types(monkeypatch):
         },
         {
             "evidence_type_id": 2,
-            "type_name": "voice_audio",
+            "type_name": "audio",
             "description": "Voice or audio recording",
         },
     ]
