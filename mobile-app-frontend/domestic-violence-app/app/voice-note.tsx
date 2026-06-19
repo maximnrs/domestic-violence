@@ -216,11 +216,7 @@ export default function VoiceNoteScreen() {
     try {
       setIsSubmitting(true);
 
-      console.log("Before resolving evidence type ID for voice audio"); // todo remove later
-
       const evidenceTypeId = await resolveVoiceAudioTypeId();
-
-      console.log("it works because it is:", evidenceTypeId); // todo remove later
       const capturedAt = recordingStartedAt ?? new Date().toISOString();
       const fileName = fileNameFromTimestamp(capturedAt);
       const trimmedContext = contextText.trim();

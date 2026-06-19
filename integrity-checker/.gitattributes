@@ -1,0 +1,9 @@
+# Force LF for all shell scripts and config files so they work in Linux containers
+*.sh        text eol=lf
+*.hcl       text eol=lf
+Dockerfile  text eol=lf
+*.py        text eol=lf
+*.sql       text eol=lf
+*.txt       text eol=lf
+*.yml       text eol=lf
+*.md        text eol=lf
