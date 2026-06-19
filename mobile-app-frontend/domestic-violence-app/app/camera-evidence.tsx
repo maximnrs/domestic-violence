@@ -162,12 +162,70 @@ export default function CameraEvidenceScreen() {
                 CAMERA
               </Text>
 
+
+              <View style={styles.modeSwitcher}>
+
+                <Pressable
+                  onPress={() => setMode('photo')}
+                  style={[
+                    styles.modeButton,
+                    mode === 'photo' && styles.modeButtonActive
+                  ]}
+                >
+                  <Ionicons
+                    name="camera"
+                    size={16}
+                    color={mode === 'photo' ? '#FFFFFF' : '#1F5857'}
+                  />
+
+                  <Text
+                    style={[
+                      styles.modeText,
+                      mode === 'photo' && styles.modeTextActive
+                    ]}
+                  >
+                    Photo
+                  </Text>
+
+                </Pressable>
+
+
+                <Pressable
+                  onPress={() => setMode('video')}
+                  style={[
+                    styles.modeButton,
+                    mode === 'video' && styles.modeButtonActive
+                  ]}
+                >
+
+                  <Ionicons
+                    name="videocam"
+                    size={16}
+                    color={mode === 'video' ? '#FFFFFF' : '#1F5857'}
+                  />
+
+                  <Text
+                    style={[
+                      styles.modeText,
+                      mode === 'video' && styles.modeTextActive
+                    ]}
+                  >
+                    Video
+                  </Text>
+
+                </Pressable>
+
+              </View>
+
+
               <View style={styles.cameraWrapper}>
+
                 <CameraView
                   ref={cameraRef}
                   style={styles.camera}
                   facing="back"
                 />
+
               </View>
 
               <Pressable
