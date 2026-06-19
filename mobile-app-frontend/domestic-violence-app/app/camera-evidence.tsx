@@ -34,9 +34,18 @@ export default function CameraEvidenceScreen() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
 
+  const [cameraReady, setCameraReady] = useState(false);
+
+  const player = useVideoPlayer(videoUri ?? '', (player) => {
+    player.loop = false;
+  });
+
 
   async function handleCapture() {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || !cameraReady) {
+      console.log('Camera not ready yet');
+      return;
+    }
 
     try {
       if (mode === 'photo') {
@@ -49,44 +58,59 @@ export default function CameraEvidenceScreen() {
           setVideoUri(null);
         }
       } else {
-        setIsRecording(true);
-
-        const video = await cameraRef.current.recordAsync();
-
-        if (video?.uri) {
-          setVideoUri(video.uri);
-          setPhotoUri(null);
-        }
-
-        setIsRecording(false);
+        await startRecording();
       }
     } catch (error) {
-      console.log(error);
-      setIsRecording(false);
+      console.log('Capture error:', error);
     } finally {
       setIsCapturing(false);
     }
   }
 
+  async function startRecording() {
+    if (!cameraRef.current || !cameraReady) {
+      console.log('Camera not ready for recording');
+      return;
+    }
+
+    try {
+      console.log('Starting recording');
+
+      setIsRecording(true);
+
+      const video = await cameraRef.current.recordAsync({
+        maxDuration: 60,
+      });
+
+      if (video?.uri) {
+        console.log('Video saved:', video.uri);
+
+        setVideoUri(video.uri);
+        setPhotoUri(null);
+      }
+    } catch (error) {
+      console.log('Video recording error:', error);
+    } finally {
+      setIsRecording(false);
+    }
+  }
 
   function stopRecording() {
     if (!cameraRef.current) return;
 
-    cameraRef.current.stopRecording();
-    setIsRecording(false);
-  }
+    console.log('Stopping recording');
 
+    cameraRef.current.stopRecording();
+  }
 
   function retake() {
     setPhotoUri(null);
     setVideoUri(null);
   }
 
-
   if (!permission) {
     return null;
   }
-
 
   if (!permission.granted) {
     return (
@@ -119,9 +143,7 @@ export default function CameraEvidenceScreen() {
     );
   }
 
-
-  const hasMedia = photoUri || videoUri;
-
+  const hasMedia = !!photoUri || !!videoUri;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -150,18 +172,15 @@ export default function CameraEvidenceScreen() {
               Camera Evidence
             </Text>
 
-            <View style={styles.topSpacer}/>
+            <View style={styles.topSpacer} />
           </View>
 
-
           {!hasMedia ? (
-
             <View style={styles.cameraCard}>
 
               <Text style={styles.eyebrow}>
                 CAMERA
               </Text>
-
 
               <View style={styles.modeSwitcher}>
 
@@ -169,7 +188,7 @@ export default function CameraEvidenceScreen() {
                   onPress={() => setMode('photo')}
                   style={[
                     styles.modeButton,
-                    mode === 'photo' && styles.modeButtonActive
+                    mode === 'photo' && styles.modeButtonActive,
                   ]}
                 >
                   <Ionicons
@@ -181,23 +200,20 @@ export default function CameraEvidenceScreen() {
                   <Text
                     style={[
                       styles.modeText,
-                      mode === 'photo' && styles.modeTextActive
+                      mode === 'photo' && styles.modeTextActive,
                     ]}
                   >
                     Photo
                   </Text>
-
                 </Pressable>
-
 
                 <Pressable
                   onPress={() => setMode('video')}
                   style={[
                     styles.modeButton,
-                    mode === 'video' && styles.modeButtonActive
+                    mode === 'video' && styles.modeButtonActive,
                   ]}
                 >
-
                   <Ionicons
                     name="videocam"
                     size={16}
@@ -207,42 +223,37 @@ export default function CameraEvidenceScreen() {
                   <Text
                     style={[
                       styles.modeText,
-                      mode === 'video' && styles.modeTextActive
+                      mode === 'video' && styles.modeTextActive,
                     ]}
                   >
                     Video
                   </Text>
-
                 </Pressable>
 
               </View>
 
-
               <View style={styles.cameraWrapper}>
-
                 <CameraView
                   ref={cameraRef}
                   style={styles.camera}
                   facing="back"
+                  mode={mode}
+                  onCameraReady={() => {
+                    console.log('Camera ready');
+                    setCameraReady(true);
+                  }}
                 />
-
               </View>
 
-
               {!isRecording ? (
-
                 <Pressable
-                  disabled={isCapturing}
+                  disabled={isCapturing || !cameraReady}
                   onPress={handleCapture}
                   style={styles.captureButton}
                 >
-
                   {isCapturing ? (
-
-                    <ActivityIndicator color="#FFFFFF"/>
-
+                    <ActivityIndicator color="#FFFFFF" />
                   ) : (
-
                     <>
                       <Ionicons
                         name={mode === 'photo' ? 'camera' : 'videocam'}
@@ -251,23 +262,20 @@ export default function CameraEvidenceScreen() {
                       />
 
                       <Text style={styles.captureButtonText}>
-                        {mode === 'photo'
+                        {!cameraReady
+                          ? 'Preparing Camera...'
+                          : mode === 'photo'
                           ? 'Capture Photo'
                           : 'Start Recording'}
                       </Text>
                     </>
-
                   )}
-
                 </Pressable>
-
               ) : (
-
                 <Pressable
                   onPress={stopRecording}
                   style={styles.stopButton}
                 >
-
                   <Ionicons
                     name="stop"
                     size={18}
@@ -277,13 +285,10 @@ export default function CameraEvidenceScreen() {
                   <Text style={styles.captureButtonText}>
                     Stop Recording
                   </Text>
-
                 </Pressable>
-
               )}
 
             </View>
-
           ) : (
 
             <View style={styles.previewCard}>
@@ -295,26 +300,23 @@ export default function CameraEvidenceScreen() {
 
               {photoUri && (
                 <Image
-                  source={{uri: photoUri}}
+                  source={{ uri: photoUri }}
                   style={styles.previewImage}
                 />
               )}
-
 
               {videoUri && (
-                <Video
-                  source={{uri: videoUri}}
+                <VideoView
+                  player={player}
                   style={styles.previewImage}
-                  useNativeControls
+                  nativeControls
                 />
               )}
-
 
               <Pressable
                 onPress={retake}
                 style={styles.secondaryButton}
               >
-
                 <Ionicons
                   name="refresh"
                   size={18}
@@ -324,16 +326,13 @@ export default function CameraEvidenceScreen() {
                 <Text style={styles.secondaryButtonText}>
                   Retake
                 </Text>
-
               </Pressable>
 
             </View>
 
           )}
 
-
           <View style={styles.contextCard}>
-
             <Text style={styles.eyebrow}>
               CONTEXT
             </Text>
@@ -346,12 +345,9 @@ export default function CameraEvidenceScreen() {
               placeholderTextColor="#9BA6A4"
               style={styles.contextInput}
             />
-
           </View>
 
-
           <Pressable style={styles.saveButton}>
-
             <Ionicons
               name="cloud-upload-outline"
               size={18}
@@ -361,16 +357,13 @@ export default function CameraEvidenceScreen() {
             <Text style={styles.saveButtonText}>
               Save Evidence
             </Text>
-
           </Pressable>
-
 
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
 
