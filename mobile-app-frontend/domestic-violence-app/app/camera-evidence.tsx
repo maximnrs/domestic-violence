@@ -228,29 +228,64 @@ export default function CameraEvidenceScreen() {
 
               </View>
 
-              <Pressable
-                disabled={isCapturing}
-                onPress={capturePhoto}
-                style={styles.captureButton}
-              >
-                {isCapturing ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="camera"
-                      size={18}
-                      color="#FFFFFF"
-                    />
 
-                    <Text style={styles.captureButtonText}>
-                      Capture Photo
-                    </Text>
-                  </>
-                )}
-              </Pressable>
+              {!isRecording ? (
+
+                <Pressable
+                  disabled={isCapturing}
+                  onPress={handleCapture}
+                  style={styles.captureButton}
+                >
+
+                  {isCapturing ? (
+
+                    <ActivityIndicator color="#FFFFFF"/>
+
+                  ) : (
+
+                    <>
+                      <Ionicons
+                        name={mode === 'photo' ? 'camera' : 'videocam'}
+                        size={18}
+                        color="#FFFFFF"
+                      />
+
+                      <Text style={styles.captureButtonText}>
+                        {mode === 'photo'
+                          ? 'Capture Photo'
+                          : 'Start Recording'}
+                      </Text>
+                    </>
+
+                  )}
+
+                </Pressable>
+
+              ) : (
+
+                <Pressable
+                  onPress={stopRecording}
+                  style={styles.stopButton}
+                >
+
+                  <Ionicons
+                    name="stop"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+
+                  <Text style={styles.captureButtonText}>
+                    Stop Recording
+                  </Text>
+
+                </Pressable>
+
+              )}
+
             </View>
+
           ) : (
+
             <View style={styles.previewCard}>
               <Text style={styles.eyebrow}>
                 PHOTO PREVIEW
