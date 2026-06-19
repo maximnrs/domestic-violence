@@ -311,9 +311,10 @@ export default function CameraEvidenceScreen() {
 
 
               <Pressable
-                onPress={retakePhoto}
+                onPress={retake}
                 style={styles.secondaryButton}
               >
+
                 <Ionicons
                   name="refresh"
                   size={18}
@@ -321,13 +322,18 @@ export default function CameraEvidenceScreen() {
                 />
 
                 <Text style={styles.secondaryButtonText}>
-                  Retake Photo
+                  Retake
                 </Text>
+
               </Pressable>
+
             </View>
+
           )}
 
+
           <View style={styles.contextCard}>
+
             <Text style={styles.eyebrow}>
               CONTEXT
             </Text>
