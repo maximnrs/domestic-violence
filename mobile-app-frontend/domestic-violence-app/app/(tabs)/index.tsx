@@ -60,7 +60,7 @@ function formatEvidenceTitle(typeName: string | undefined, fileName: string) {
   }
 
   if (typeName === 'video') {
-    return fileName.toLowerCase().includes('photo') ? 'Photo evidence' : 'Camera evidence';
+    return fileName.toLowerCase().includes('photo') ? 'Photo evidence' : 'Video evidence';
   }
 
   return fileName || 'Evidence item';
@@ -86,18 +86,44 @@ function formatEvidenceMeta(evidence: EvidenceResponse, incident: IncidentRespon
   return evidence.file_name || formatIncidentLabel(incident);
 }
 
-function formatRecentTime(value: string) {
-  const date = new Date(value);
+function parseEvidenceTimestamp(value: string) {
+  const normalizedValue = value.trim().replace(' ', 'T');
+  const timestampParts = normalizedValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+  );
 
-  if (Number.isNaN(date.getTime())) {
+  if (timestampParts) {
+    const [, year, month, day, hour, minute, second = '0'] = timestampParts;
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    ).getTime();
+  }
+
+  const parsedTimestamp = Date.parse(value);
+  return Number.isNaN(parsedTimestamp) ? 0 : parsedTimestamp;
+}
+
+function formatRecentTime(value: string) {
+  const timestamp = parseEvidenceTimestamp(value);
+
+  if (timestamp === 0) {
     return value;
   }
+
+  const date = new Date(timestamp);
+  const currentYear = new Date().getFullYear();
 
   return new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     month: 'short',
+    ...(date.getFullYear() !== currentYear ? { year: 'numeric' } : {}),
   }).format(date);
 }
 
@@ -168,9 +194,17 @@ export default function HomeScreen() {
 
       const nextMoments = fulfilledEvidence
         .sort(
-          (first, second) =>
-            new Date(second.evidence.created_at).getTime() -
-            new Date(first.evidence.created_at).getTime()
+          (first, second) => {
+            const timestampDifference =
+              parseEvidenceTimestamp(second.evidence.created_at) -
+              parseEvidenceTimestamp(first.evidence.created_at);
+
+            if (timestampDifference !== 0) {
+              return timestampDifference;
+            }
+
+            return second.evidence.evidence_id - first.evidence.evidence_id;
+          }
         )
         .slice(0, 3)
         .map<RecentEvidenceMoment>(({ evidence, incident }) => {
@@ -249,7 +283,9 @@ export default function HomeScreen() {
   }
 
   function openRecentMoment(moment: RecentEvidenceMoment) {
-    router.push(`/incidents/${moment.incident.incident_id}` as Href);
+    router.push(
+      `/incidents/${moment.incident.incident_id}?evidenceId=${moment.evidence.evidence_id}` as Href
+    );
   }
 
   function openCaseOverview() {
