@@ -53,7 +53,8 @@
           "microphonePermission": "Allow Nura to record audio evidence.",
           "enableBackgroundRecording": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,
