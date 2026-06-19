@@ -287,14 +287,28 @@ export default function CameraEvidenceScreen() {
           ) : (
 
             <View style={styles.previewCard}>
+
               <Text style={styles.eyebrow}>
-                PHOTO PREVIEW
+                {photoUri ? 'PHOTO PREVIEW' : 'VIDEO PREVIEW'}
               </Text>
 
-              <Image
-                source={{ uri: photoUri }}
-                style={styles.previewImage}
-              />
+
+              {photoUri && (
+                <Image
+                  source={{uri: photoUri}}
+                  style={styles.previewImage}
+                />
+              )}
+
+
+              {videoUri && (
+                <Video
+                  source={{uri: videoUri}}
+                  style={styles.previewImage}
+                  useNativeControls
+                />
+              )}
+
 
               <Pressable
                 onPress={retakePhoto}
