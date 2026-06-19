@@ -83,3 +83,130 @@ export default function CameraEvidenceScreen() {
       </SafeAreaView>
     );
   }
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.topRow}>
+            <Pressable
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={22}
+                color="#1F5857"
+              />
+            </Pressable>
+
+            <Text style={styles.topTitle}>
+              Camera Evidence
+            </Text>
+
+            <View style={styles.topSpacer} />
+          </View>
+
+          {!photoUri ? (
+            <View style={styles.cameraCard}>
+              <Text style={styles.eyebrow}>
+                CAMERA
+              </Text>
+
+              <View style={styles.cameraWrapper}>
+                <CameraView
+                  ref={cameraRef}
+                  style={styles.camera}
+                  facing="back"
+                />
+              </View>
+
+              <Pressable
+                disabled={isCapturing}
+                onPress={capturePhoto}
+                style={styles.captureButton}
+              >
+                {isCapturing ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="camera"
+                      size={18}
+                      color="#FFFFFF"
+                    />
+
+                    <Text style={styles.captureButtonText}>
+                      Capture Photo
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.previewCard}>
+              <Text style={styles.eyebrow}>
+                PHOTO PREVIEW
+              </Text>
+
+              <Image
+                source={{ uri: photoUri }}
+                style={styles.previewImage}
+              />
+
+              <Pressable
+                onPress={retakePhoto}
+                style={styles.secondaryButton}
+              >
+                <Ionicons
+                  name="refresh"
+                  size={18}
+                  color="#1F5857"
+                />
+
+                <Text style={styles.secondaryButtonText}>
+                  Retake Photo
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          <View style={styles.contextCard}>
+            <Text style={styles.eyebrow}>
+              CONTEXT
+            </Text>
+
+            <TextInput
+              multiline
+              value={contextText}
+              onChangeText={setContextText}
+              placeholder="Add optional context for this photo..."
+              placeholderTextColor="#9BA6A4"
+              style={styles.contextInput}
+            />
+          </View>
+
+          <Pressable
+            style={styles.saveButton}
+          >
+            <Ionicons
+              name="cloud-upload-outline"
+              size={18}
+              color="#FFFFFF"
+            />
+
+            <Text style={styles.saveButtonText}>
+              Save Photo
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
