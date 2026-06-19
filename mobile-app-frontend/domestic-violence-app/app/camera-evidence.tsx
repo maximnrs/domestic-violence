@@ -342,15 +342,16 @@ export default function CameraEvidenceScreen() {
               multiline
               value={contextText}
               onChangeText={setContextText}
-              placeholder="Add optional context for this photo..."
+              placeholder="Add optional context..."
               placeholderTextColor="#9BA6A4"
               style={styles.contextInput}
             />
+
           </View>
 
-          <Pressable
-            style={styles.saveButton}
-          >
+
+          <Pressable style={styles.saveButton}>
+
             <Ionicons
               name="cloud-upload-outline"
               size={18}
@@ -358,9 +359,12 @@ export default function CameraEvidenceScreen() {
             />
 
             <Text style={styles.saveButtonText}>
-              Save Photo
+              Save Evidence
             </Text>
+
           </Pressable>
+
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
