@@ -24,9 +24,15 @@ export default function CameraEvidenceScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
 
+  const [mode, setMode] = useState<'photo' | 'video'>('photo');
+
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
+
   const [contextText, setContextText] = useState('');
+
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
 
   async function capturePhoto() {
     if (!cameraRef.current) return;
