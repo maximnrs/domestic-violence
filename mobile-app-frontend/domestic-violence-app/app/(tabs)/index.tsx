@@ -87,6 +87,10 @@ export default function HomeScreen() {
     if (title === 'Written\nNote') {
       router.push('/written-note' as Href);
     }
+    
+    if (title === "Photo\n& Video") {
+      router.push("/camera-evidence" as Href);
+    }
   }
 
   // Returns a greeting based on local time: morning / afternoon / evening
