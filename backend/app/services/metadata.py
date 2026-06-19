@@ -1,8 +1,23 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.core import timestamp
 from app.models.evidence import Evidence
 from app.models.encryption import Encryption
 from app.models.schemas import EvidenceCreate
+
+
+def hydrate_trusted_timestamp_time(evidence: Evidence) -> Evidence:
+    if evidence.timestamp_time or not evidence.timestamp_token:
+        return evidence
+
+    try:
+        timestamp_info = timestamp.extract_timestamp_info_from_token_der(evidence.timestamp_token)
+    except ValueError:
+        return evidence
+
+    evidence.timestamp_time = timestamp_info["time"]
+    return evidence
+
 
 async def save_evidence_metadata(
     db: AsyncSession,
@@ -45,6 +60,7 @@ async def save_evidence_metadata(
         timestamp_hash_algorithm=timestamp_data["hash_algorithm"],
         timestamp_message_imprint=timestamp_data["message_imprint"],
         timestamp_nonce=timestamp_data["nonce"],
+        timestamp_time=timestamp_data.get("time"),
         description=data.description
     )
     db.add(evidence)
@@ -77,7 +93,7 @@ async def get_evidence(db: AsyncSession, evidence_id: int, user_id: int) -> Evid
     evidence = result.scalar_one_or_none()
     if not evidence:
         raise ValueError("Evidence not found or access denied")
-    return evidence
+    return hydrate_trusted_timestamp_time(evidence)
 
 async def get_evidence_encryption(db: AsyncSession, evidence_id: int) -> Encryption:
     """
@@ -101,4 +117,4 @@ async def get_incident_evidence(db: AsyncSession, incident_id: int, user_id: int
             Evidence.user_id == user_id
         )
     )
-    return result.scalars().all()
+    return [hydrate_trusted_timestamp_time(evidence) for evidence in result.scalars().all()]

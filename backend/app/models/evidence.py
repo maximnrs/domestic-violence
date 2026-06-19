@@ -23,6 +23,7 @@ class Evidence(Base):
     timestamp_hash_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
     timestamp_message_imprint: Mapped[str | None] = mapped_column(String(128), nullable=True)
     timestamp_nonce: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    timestamp_time: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 

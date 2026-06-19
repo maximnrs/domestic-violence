@@ -33,9 +33,6 @@ async def upload_evidence(
     # Step 2: Encrypt the file
     encryption_data = await encryption_service.encrypt_file(user_id, incident_id, file_bytes)
 
-    # Step 2: Get a timestamp
-    await timestamp_client.request_timestamp()
-
     # Step 3: Save metadata to database
     evidence = await metadata_repository.save_evidence_metadata(
         db,

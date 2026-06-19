@@ -73,6 +73,24 @@ function getEvidenceIconName(typeName: string | undefined): keyof typeof Ionicon
   return 'document-outline';
 }
 
+function formatTrustedTimestamp(item: EvidenceResponse) {
+  if (!item.timestamp_time && !item.timestamp_status) {
+    return null;
+  }
+
+  const status = item.timestamp_status ? item.timestamp_status.replace(/_/g, ' ') : null;
+
+  if (item.timestamp_time && status) {
+    return `Trusted timestamp ${item.timestamp_time} (${status})`;
+  }
+
+  if (item.timestamp_time) {
+    return `Trusted timestamp ${item.timestamp_time}`;
+  }
+
+  return `Trusted timestamp ${status}`;
+}
+
 type StatusPanelProps = {
   actionLabel?: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -426,6 +444,7 @@ export default function IncidentDetailScreen() {
               const noteContent = noteContentById[item.evidence_id];
               const noteError = noteErrorById[item.evidence_id];
               const evidenceTitle = getEvidenceTitle(typeName, item.file_name);
+              const trustedTimestamp = formatTrustedTimestamp(item);
 
               return (
                 <Pressable
@@ -454,7 +473,17 @@ export default function IncidentDetailScreen() {
                         />
                       ) : null}
                     </View>
-                    <Text style={styles.evidenceMeta}>Created {item.created_at}</Text>
+                    {trustedTimestamp ? (
+                      <Text style={styles.trustedTimestampMeta}>{trustedTimestamp}</Text>
+                    ) : (
+                      <Text style={styles.evidenceMeta}>Created {item.created_at}</Text>
+                    )}
+                    {trustedTimestamp && item.timestamp_authority ? (
+                      <Text style={styles.evidenceMeta}>Authority {item.timestamp_authority}</Text>
+                    ) : null}
+                    {trustedTimestamp ? (
+                      <Text style={styles.evidenceMeta}>Database record {item.created_at}</Text>
+                    ) : null}
                     <Text style={styles.evidenceMeta}>
                       {typeName ? `Type ${typeName}` : `Type ID #${item.evidence_type_id}`}
                     </Text>
@@ -697,6 +726,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope_600SemiBold',
     fontSize: 12,
     marginTop: 4,
+  },
+  trustedTimestampMeta: {
+    color: '#1F5857',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 5,
   },
   evidenceDescription: {
     color: '#71807E',

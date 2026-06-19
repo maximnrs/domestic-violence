@@ -87,6 +87,7 @@ export type EvidenceResponse = {
   timestamp_hash_algorithm: string | null;
   timestamp_message_imprint: string | null;
   timestamp_nonce: string | null;
+  timestamp_time: string | null;
   created_at: string;
   description: string | null;
 };

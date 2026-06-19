@@ -127,6 +127,7 @@ class EvidenceResponse(BaseModel):
     timestamp_hash_algorithm: str | None
     timestamp_message_imprint: str | None
     timestamp_nonce: str | None
+    timestamp_time: str | None
     created_at: datetime
     description: str | None
 
