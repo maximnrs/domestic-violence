@@ -34,31 +34,59 @@ export default function CameraEvidenceScreen() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
 
-  async function capturePhoto() {
+
+  async function handleCapture() {
     if (!cameraRef.current) return;
 
     try {
-      setIsCapturing(true);
+      if (mode === 'photo') {
+        setIsCapturing(true);
 
-      const photo = await cameraRef.current.takePictureAsync();
+        const photo = await cameraRef.current.takePictureAsync();
 
-      if (photo?.uri) {
-        setPhotoUri(photo.uri);
+        if (photo?.uri) {
+          setPhotoUri(photo.uri);
+          setVideoUri(null);
+        }
+      } else {
+        setIsRecording(true);
+
+        const video = await cameraRef.current.recordAsync();
+
+        if (video?.uri) {
+          setVideoUri(video.uri);
+          setPhotoUri(null);
+        }
+
+        setIsRecording(false);
       }
     } catch (error) {
       console.log(error);
+      setIsRecording(false);
     } finally {
       setIsCapturing(false);
     }
   }
 
-  function retakePhoto() {
-    setPhotoUri(null);
+
+  function stopRecording() {
+    if (!cameraRef.current) return;
+
+    cameraRef.current.stopRecording();
+    setIsRecording(false);
   }
+
+
+  function retake() {
+    setPhotoUri(null);
+    setVideoUri(null);
+  }
+
 
   if (!permission) {
     return null;
   }
+
 
   if (!permission.granted) {
     return (
@@ -91,6 +119,10 @@ export default function CameraEvidenceScreen() {
     );
   }
 
+
+  const hasMedia = photoUri || videoUri;
+
+
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView
@@ -101,6 +133,7 @@ export default function CameraEvidenceScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
+
           <View style={styles.topRow}>
             <Pressable
               onPress={() => router.back()}
@@ -117,11 +150,14 @@ export default function CameraEvidenceScreen() {
               Camera Evidence
             </Text>
 
-            <View style={styles.topSpacer} />
+            <View style={styles.topSpacer}/>
           </View>
 
-          {!photoUri ? (
+
+          {!hasMedia ? (
+
             <View style={styles.cameraCard}>
+
               <Text style={styles.eyebrow}>
                 CAMERA
               </Text>
