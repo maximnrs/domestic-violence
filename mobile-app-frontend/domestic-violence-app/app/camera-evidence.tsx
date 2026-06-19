@@ -210,3 +210,189 @@ export default function CameraEvidenceScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#F5F7F5',
+  },
+
+  keyboardView: {
+    flex: 1,
+  },
+
+  content: {
+    padding: 24,
+    paddingBottom: 110,
+  },
+
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EAF3F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  topTitle: {
+    color: '#102120',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 17,
+  },
+
+  topSpacer: {
+    width: 38,
+  },
+
+  cameraCard: {
+    marginTop: 24,
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E7ECEA',
+    backgroundColor: '#FFFFFF',
+  },
+
+  eyebrow: {
+    color: '#8D9998',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+
+  cameraWrapper: {
+    overflow: 'hidden',
+    borderRadius: 12,
+    marginTop: 12,
+    height: 380,
+  },
+
+  camera: {
+    flex: 1,
+  },
+
+  captureButton: {
+    marginTop: 16,
+    minHeight: 50,
+    borderRadius: 14,
+    backgroundColor: '#1F5857',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  captureButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 14,
+  },
+
+  previewCard: {
+    marginTop: 24,
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E7ECEA',
+    backgroundColor: '#FFFFFF',
+  },
+
+  previewImage: {
+    width: '100%',
+    height: 380,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+
+  secondaryButton: {
+    marginTop: 14,
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: '#EAF3F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  secondaryButtonText: {
+    color: '#1F5857',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 14,
+  },
+
+  contextCard: {
+    marginTop: 16,
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E7ECEA',
+    backgroundColor: '#FFFFFF',
+  },
+
+  contextInput: {
+    marginTop: 12,
+    minHeight: 120,
+    color: '#102120',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 15,
+  },
+
+  saveButton: {
+    marginTop: 18,
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: '#1F5857',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 15,
+  },
+
+  permissionContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+
+  permissionTitle: {
+    marginTop: 16,
+    fontSize: 22,
+    fontFamily: 'Manrope_800ExtraBold',
+    color: '#102120',
+  },
+
+  permissionText: {
+    marginTop: 8,
+    textAlign: 'center',
+    color: '#71807E',
+    fontFamily: 'Manrope_500Medium',
+  },
+
+  permissionButton: {
+    marginTop: 24,
+    backgroundColor: '#1F5857',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+
+  permissionButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Manrope_800ExtraBold',
+  },
+});
