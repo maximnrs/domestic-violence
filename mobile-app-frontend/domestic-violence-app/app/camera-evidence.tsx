@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Video } from 'expo-av';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 
