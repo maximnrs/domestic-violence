@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { router, type Href } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   ActivityIndicator,
@@ -19,8 +19,77 @@ import {
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { IncidentPicker } from '@/components/evidence/IncidentPicker';
+import { useEvidenceCaptureContext } from '@/hooks/use-evidence-capture-context';
+import { uploadEvidence } from '@/services/api';
+
+const CAMERA_EVIDENCE_TYPE_NAME = 'video';
+
+function fileNameFromTimestamp(kind: 'photo' | 'video', timestamp: string, uri: string) {
+  const fallbackExtension = kind === 'photo' ? 'jpg' : 'mp4';
+  const uriPath = uri.split('?')[0] ?? '';
+  const lastSegment = uriPath.split('/').pop() ?? '';
+  const extension = lastSegment.includes('.') ? lastSegment.split('.').pop()?.toLowerCase() : null;
+  return `camera-${kind}-${timestamp.replace(/[:.]/g, '-')}.${extension || fallbackExtension}`;
+}
+
+function mediaMimeType(kind: 'photo' | 'video', uri: string) {
+  const lowerUri = uri.toLowerCase().split('?')[0];
+
+  if (kind === 'photo') {
+    if (lowerUri.endsWith('.png')) {
+      return 'image/png';
+    }
+
+    if (lowerUri.endsWith('.heic') || lowerUri.endsWith('.heif')) {
+      return 'image/heic';
+    }
+
+    return 'image/jpeg';
+  }
+
+  if (lowerUri.endsWith('.mov')) {
+    return 'video/quicktime';
+  }
+
+  if (lowerUri.endsWith('.webm')) {
+    return 'video/webm';
+  }
+
+  return 'video/mp4';
+}
+
 export default function CameraEvidenceScreen() {
   const cameraRef = useRef<CameraView>(null);
+  const {
+    contextError,
+    handleCreateIncident: createIncidentForEvidence,
+    incidentError,
+    incidents,
+    isContextLoading,
+    isCreatingIncident,
+    isIncidentLoading,
+    loadContext,
+    newIncidentDate,
+    newIncidentDescription,
+    newIncidentLocation,
+    newIncidentTime,
+    newIncidentType,
+    refreshEvidenceTypes,
+    resolveEvidenceTypeId,
+    selectedIncident,
+    selectedIncidentId,
+    selectIncident,
+    setIncidentError,
+    setNewIncidentDate,
+    setNewIncidentDescription,
+    setNewIncidentLocation,
+    setNewIncidentTime,
+    setNewIncidentType,
+    showCreateIncident,
+    toggleCreateIncident,
+    typeError,
+  } = useEvidenceCaptureContext();
 
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -30,9 +99,14 @@ export default function CameraEvidenceScreen() {
   const [videoUri, setVideoUri] = useState<string | null>(null);
 
   const [contextText, setContextText] = useState('');
+  const [capturedAt, setCapturedAt] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [cameraReady, setCameraReady] = useState(false);
 
@@ -40,11 +114,18 @@ export default function CameraEvidenceScreen() {
     player.loop = false;
   });
 
+  useEffect(() => {
+    loadContext();
+  }, [loadContext]);
 
   async function handleCapture() {
     if (!cameraRef.current || !cameraReady) {
       return;
     }
+
+    setCaptureError(null);
+    setSubmitError(null);
+    setSuccessMessage(null);
 
     try {
       if (mode === 'photo') {
@@ -55,11 +136,13 @@ export default function CameraEvidenceScreen() {
         if (photo?.uri) {
           setPhotoUri(photo.uri);
           setVideoUri(null);
+          setCapturedAt(new Date().toISOString());
         }
       } else {
         await startRecording();
       }
     } catch (error) {
+      setCaptureError(error instanceof Error ? error.message : 'Unable to capture evidence.');
     } finally {
       setIsCapturing(false);
     }
@@ -72,6 +155,9 @@ export default function CameraEvidenceScreen() {
 
     try {
       setIsRecording(true);
+      setCaptureError(null);
+      setSubmitError(null);
+      setSuccessMessage(null);
 
       const video = await cameraRef.current.recordAsync({
         maxDuration: 60,
@@ -80,8 +166,10 @@ export default function CameraEvidenceScreen() {
       if (video?.uri) {
         setVideoUri(video.uri);
         setPhotoUri(null);
+        setCapturedAt(new Date().toISOString());
       }
     } catch (error) {
+      setCaptureError(error instanceof Error ? error.message : 'Unable to record video.');
     } finally {
       setIsRecording(false);
     }
@@ -96,6 +184,78 @@ export default function CameraEvidenceScreen() {
   function retake() {
     setPhotoUri(null);
     setVideoUri(null);
+    setCapturedAt(null);
+    setSubmitError(null);
+    setSuccessMessage(null);
+  }
+
+  async function handleCreateIncident() {
+    setSuccessMessage(null);
+    const createdIncident = await createIncidentForEvidence();
+    if (createdIncident) {
+      setSuccessMessage('Incident ready. Your camera evidence is still here.');
+    }
+  }
+
+  async function resolveCameraEvidenceTypeId() {
+    return resolveEvidenceTypeId(CAMERA_EVIDENCE_TYPE_NAME, 'Camera');
+  }
+
+  async function handleSubmit() {
+    setSubmitError(null);
+    setSuccessMessage(null);
+
+    if (isRecording) {
+      setSubmitError('Stop the recording before saving it.');
+      return;
+    }
+
+    const fileUri = photoUri ?? videoUri;
+    const fileKind = photoUri ? 'photo' : videoUri ? 'video' : null;
+
+    if (!fileUri || !fileKind) {
+      setSubmitError('Capture a photo or video before saving.');
+      return;
+    }
+
+    if (!selectedIncidentId) {
+      setSubmitError('Select or create an incident before saving the evidence.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      const evidenceTypeId = await resolveCameraEvidenceTypeId();
+      const captureTimestamp = capturedAt ?? new Date().toISOString();
+      const trimmedContext = contextText.trim();
+
+      await uploadEvidence({
+        incident_id: selectedIncidentId,
+        evidence_type_id: evidenceTypeId,
+        file: {
+          uri: fileUri,
+          name: fileNameFromTimestamp(fileKind, captureTimestamp, fileUri),
+          type: mediaMimeType(fileKind, fileUri),
+        },
+        description: trimmedContext.length > 0 ? trimmedContext : null,
+        evidence_activation: 'in_app_camera',
+        evidence_device: `${Platform.OS} camera`,
+      });
+
+      setSuccessMessage('Camera evidence saved.');
+      setContextText('');
+      setPhotoUri(null);
+      setVideoUri(null);
+      setCapturedAt(null);
+      setTimeout(() => {
+        router.replace(`/incidents/${selectedIncidentId}?refresh=${Date.now()}` as Href);
+      }, 550);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to save camera evidence.');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (!permission) {
@@ -336,17 +496,88 @@ export default function CameraEvidenceScreen() {
             />
           </View>
 
-          <Pressable style={styles.saveButton}>
-            <Ionicons
-              name="cloud-upload-outline"
-              size={18}
-              color="#FFFFFF"
-            />
-
-            <Text style={styles.saveButtonText}>
-              Save Evidence
+          {captureError ? (
+            <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+              {captureError}
             </Text>
+          ) : null}
+
+          <IncidentPicker
+            contextError={contextError}
+            incidentError={incidentError}
+            incidents={incidents}
+            isContextLoading={isContextLoading}
+            isCreatingIncident={isCreatingIncident}
+            isIncidentLoading={isIncidentLoading}
+            loadContext={loadContext}
+            newIncidentDate={newIncidentDate}
+            newIncidentDescription={newIncidentDescription}
+            newIncidentLocation={newIncidentLocation}
+            newIncidentTime={newIncidentTime}
+            newIncidentType={newIncidentType}
+            onCreateIncident={handleCreateIncident}
+            onIncidentSelected={() => setSubmitError(null)}
+            refreshEvidenceTypes={refreshEvidenceTypes}
+            selectedIncident={selectedIncident}
+            selectedIncidentId={selectedIncidentId}
+            selectIncident={selectIncident}
+            setIncidentError={setIncidentError}
+            setNewIncidentDate={setNewIncidentDate}
+            setNewIncidentDescription={setNewIncidentDescription}
+            setNewIncidentLocation={setNewIncidentLocation}
+            setNewIncidentTime={setNewIncidentTime}
+            setNewIncidentType={setNewIncidentType}
+            showCreateIncident={showCreateIncident}
+            toggleCreateIncident={toggleCreateIncident}
+            typeError={typeError}
+          />
+
+          {submitError ? (
+            <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+              {submitError}
+            </Text>
+          ) : null}
+
+          {successMessage ? (
+            <Text accessibilityLiveRegion="polite" style={styles.successText}>
+              {successMessage}
+            </Text>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={isSubmitting}
+            onPress={handleSubmit}
+            style={[styles.saveButton, isSubmitting ? styles.buttonDisabled : null]}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={18}
+                  color="#FFFFFF"
+                />
+
+                <Text style={styles.saveButtonText}>
+                  Save Evidence
+                </Text>
+              </>
+            )}
           </Pressable>
+
+          {capturedAt ? (
+            <View style={styles.metadataPanel}>
+              <Text style={styles.metadataLabel}>
+                Captured automatically
+              </Text>
+
+              <Text style={styles.metadataValue}>
+                {capturedAt}
+              </Text>
+            </View>
+          ) : null}
 
         </ScrollView>
       </KeyboardAvoidingView>
@@ -535,6 +766,49 @@ const styles = StyleSheet.create({
   saveButtonText:{
     color:'#FFFFFF',
     fontFamily:'Manrope_800ExtraBold'
+  },
+
+  buttonDisabled:{
+    opacity:0.64
+  },
+
+  errorText:{
+    color:'#B84E58',
+    fontFamily:'Manrope_700Bold',
+    fontSize:13,
+    lineHeight:19,
+    marginTop:14
+  },
+
+  successText:{
+    color:'#1F5857',
+    fontFamily:'Manrope_800ExtraBold',
+    fontSize:13,
+    lineHeight:19,
+    marginTop:14
+  },
+
+  metadataPanel:{
+    backgroundColor:'#F8FAF9',
+    borderColor:'#E0E7E5',
+    borderRadius:12,
+    borderWidth:1,
+    marginTop:15,
+    padding:12
+  },
+
+  metadataLabel:{
+    color:'#8D9998',
+    fontFamily:'Manrope_700Bold',
+    fontSize:12
+  },
+
+  metadataValue:{
+    color:'#102120',
+    fontFamily:'Manrope_600SemiBold',
+    fontSize:13,
+    lineHeight:19,
+    marginTop:4
   },
 
   permissionContainer:{
