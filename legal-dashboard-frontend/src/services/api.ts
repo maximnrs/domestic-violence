@@ -1,165 +1,263 @@
-import { apiRequest } from "./legalApiClient";
-import type { LegalCase, Incident, Evidence, AudioEvidence, TranscriptionStatus } from "../types/legalDashboard";
+import {
+  apiRequest as clientRequest,
+  getAuthToken,
+  setAuthToken,
+} from "./legalApiClient";
 
-type CaseResponse = {
-  case_id: number | string;
-  user_id?: number;
-  case_title?: string;
-  description?: string | null;
-  creation_date?: string;
-  status?: string | null;
+export type LoginRequest = {
+  email: string;
+  password: string;
 };
 
-type IncidentResponse = {
-  incident_id: number | string;
-  case_id: number | string;
+export type RegisterRequest = LoginRequest & {
+  first_name: string;
+  last_name: string;
+  phone_number?: string | null;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+};
+
+export type UserResponse = {
+  user_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_number: string | null;
+  account_status: boolean;
+  created_at: string;
+};
+
+export type CaseResponse = {
+  case_id: number;
+  user_id: number;
+  case_title: string;
+  description: string | null;
+  creation_date: string;
+  status: string | null;
+};
+
+export type IncidentType =
+  | 'verbal'
+  | 'physical'
+  | 'psychological'
+  | 'financial'
+  | 'sexual'
+  | 'stalking'
+  | 'other';
+
+export type IncidentResponse = {
+  incident_id: number;
+  case_id: number;
+  incident_date: string | null;
+  incident_time: string | null;
+  location: string | null;
+  incident_type: IncidentType | null;
+  description: string | null;
+  creation_date: string;
+};
+
+export type IncidentCreateRequest = {
+  case_id: number;
   incident_date?: string | null;
   incident_time?: string | null;
   location?: string | null;
-  incident_type?: string | null;
-  description?: string | null;
-  creation_date?: string;
-};
-
-type EvidenceResponse = {
-  evidence_id: number | string;
-  incident_id: number | string;
-  user_id?: number;
-  evidence_type_id?: number | string;
-  file_name?: string;
-  evidence_location?: string | null;
-  file_path?: string;
-  file_hash?: string;
-  created_at?: string;
+  incident_type?: IncidentType | null;
   description?: string | null;
 };
 
-type EvidenceTypeResponse = {
-  evidence_type_id: number | string;
+export type EvidenceResponse = {
+  evidence_id: number;
+  incident_id: number;
+  user_id: number;
+  evidence_type_id: number;
+  file_name: string;
+  evidence_location: string | null;
+  evidence_imei: string | null;
+  evidence_device: string | null;
+  evidence_activation: string | null;
+  file_path: string;
+  file_hash: string;
+  created_at: string;
+  description: string | null;
+};
+
+export type EvidenceTypeResponse = {
+  evidence_type_id: number;
   type_name: string;
-  description?: string | null;
+  description: string | null;
 };
 
-let evidenceTypeMap: Record<string, string> | null = null;
+export type EvidenceDownloadResponse = {
+  status: "success";
+  message: string;
+  data: string;
+};
 
-async function ensureEvidenceTypes() {
-  if (evidenceTypeMap) return evidenceTypeMap;
-  try {
-    const types = await apiRequest<EvidenceTypeResponse[]>("/evidence/types/");
-    evidenceTypeMap = {};
-    types.forEach((t) => (evidenceTypeMap![String(t.evidence_type_id)] = t.type_name));
-  } catch {
-    evidenceTypeMap = {};
+export type UploadEvidenceRequest = {
+  incident_id: number;
+  evidence_type_id: number;
+  file: {
+    blob?: Blob;
+    uri?: string;
+    name: string;
+    type: string;
+  };
+  description?: string | null;
+  evidence_location?: string | null;
+  evidence_imei?: string | null;
+  evidence_device?: string | null;
+  evidence_activation?: string | null;
+};
+
+export { getAuthToken, setAuthToken };
+
+let dashboardLoginPromise: Promise<TokenResponse> | null = null;
+
+function shouldUseDashboardAutoLogin() {
+  return import.meta.env.VITE_DASHBOARD_AUTO_LOGIN === "true";
+}
+
+async function ensureDashboardAuth() {
+  if (getAuthToken() || !shouldUseDashboardAutoLogin()) {
+    return;
   }
 
-  return evidenceTypeMap;
-}
+  const email = import.meta.env.VITE_DASHBOARD_EMAIL;
+  const password = import.meta.env.VITE_DASHBOARD_PASSWORD;
 
-function mapCaseResponseToLegalCase(resp: CaseResponse): LegalCase {
-  const id = String(resp.case_id);
-  return {
-    id,
-    survivorAlias: resp.case_title ?? `Case ${id}`,
-    status: (resp.status as LegalCase["status"]) ?? "open",
-    createdAt: resp.creation_date ?? "",
-    lastIncidentAt: "",
-    updatedAt: resp.creation_date ?? "",
-    reportsGenerated: 0,
-    incidents: [],
-  };
-}
-
-async function mapIncidentResponseToIncident(resp: IncidentResponse): Promise<Incident> {
-  const id = String(resp.incident_id);
-  const caseId = String(resp.case_id);
-  const dateTime = resp.incident_date
-    ? `${resp.incident_date}${resp.incident_time ? ", " + resp.incident_time : ""}`
-    : resp.creation_date ?? "";
-
-  const incident: Incident = {
-    id,
-    caseId,
-    dateTime,
-    type: resp.incident_type ?? "Unknown",
-    status: "new",
-    evidence: await listIncidentEvidence(id),
-  };
-
-  return incident;
-}
-
-async function mapEvidenceResponseToEvidence(resp: EvidenceResponse): Promise<Evidence> {
-  await ensureEvidenceTypes();
-  const id = String(resp.evidence_id);
-  const incidentId = String(resp.incident_id);
-  const typeName = evidenceTypeMap ? evidenceTypeMap[String(resp.evidence_type_id)] ?? "Metadata" : "Metadata";
-
-  const base = {
-    id,
-    incidentId,
-    type: (typeName as any),
-    filename: resp.file_name ?? "",
-    capturedAt: resp.created_at ?? "",
-    size: "-",
-    status: "new",
-    source: "Nura Mobile App" as const,
-    hashVerified: true,
-    timestampVerified: true,
-    auditTrailAvailable: true,
-  };
-
-  if (typeName.toLowerCase().includes("audio")) {
-    const audio: AudioEvidence = {
-      ...base,
-      type: "Audio",
-      duration: "",
-      transcriptionStatus: "not_requested" as TranscriptionStatus,
-    };
-    return audio;
+  if (!email || !password) {
+    return;
   }
 
-  return base as Evidence;
+  dashboardLoginPromise ??= login({ email, password }).finally(() => {
+    dashboardLoginPromise = null;
+  });
+
+  await dashboardLoginPromise;
 }
 
-export async function getCurrentUser() {
-  return apiRequest<Record<string, unknown>>("/auth/me");
+async function apiRequest<TResponse>(
+  path: string,
+  options: RequestInit = {},
+  config: { jsonContentType?: boolean; skipAuth?: boolean } = { jsonContentType: true }
+): Promise<TResponse> {
+  if (!config.skipAuth) {
+    await ensureDashboardAuth();
+  }
+
+  return clientRequest<TResponse>(path, options, {
+    jsonContentType: config.jsonContentType ?? true,
+  });
 }
 
-export async function getCases(): Promise<LegalCase[]> {
-  const resp = await apiRequest<CaseResponse[]>("/cases/");
-  const cases = resp.map(mapCaseResponseToLegalCase);
-
-  // Load incidents for each case in parallel and attach them.
-  await Promise.all(
-    cases.map(async (c) => {
-      const incidents = await listIncidents(c.id);
-      c.incidents = incidents;
-      if (incidents.length > 0) {
-        c.lastIncidentAt = incidents[0].dateTime;
-      }
-    })
+export async function login(payload: LoginRequest) {
+  const tokenResponse = await apiRequest<TokenResponse>(
+    "/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    { skipAuth: true }
   );
 
-  return cases;
+  setAuthToken(tokenResponse.access_token);
+  return tokenResponse;
 }
 
-export async function listIncidents(caseId: string): Promise<Incident[]> {
-  const resp = await apiRequest<IncidentResponse[]>(`/incidents/?case_id=${caseId}`);
-  const mapped = await Promise.all(resp.map(mapIncidentResponseToIncident));
-  return mapped;
+export function register(payload: RegisterRequest) {
+  return apiRequest<UserResponse>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
-export async function listIncidentEvidence(incidentId: string): Promise<Evidence[]> {
-  const resp = await apiRequest<EvidenceResponse[]>(`/evidence/?incident_id=${incidentId}`);
-  const mapped = await Promise.all(resp.map(mapEvidenceResponseToEvidence));
-  return mapped;
+export function getCurrentUser() {
+  return apiRequest<UserResponse>("/auth/me");
 }
 
-export async function listCaseEvidence(caseId: string): Promise<Evidence[]> {
+export function getCases() {
+  return apiRequest<CaseResponse[]>("/cases/");
+}
+
+export function getCase(caseId: number) {
+  return apiRequest<CaseResponse>(`/cases/${caseId}`);
+}
+
+export function listIncidents(caseId: number) {
+  return apiRequest<IncidentResponse[]>(`/incidents/?case_id=${caseId}`);
+}
+
+export function getIncident(incidentId: number) {
+  return apiRequest<IncidentResponse>(`/incidents/${incidentId}`);
+}
+
+export function createIncident(payload: IncidentCreateRequest) {
+  return apiRequest<IncidentResponse>("/incidents/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getEvidenceTypes() {
+  return apiRequest<EvidenceTypeResponse[]>("/evidence-types/");
+}
+
+export function listIncidentEvidence(incidentId: number) {
+  return apiRequest<EvidenceResponse[]>(`/evidence/?incident_id=${incidentId}`);
+}
+
+export async function listCaseEvidence(caseId: number) {
   const incidents = await listIncidents(caseId);
-  return incidents.flatMap((i) => i.evidence);
+  const evidenceGroups = await Promise.all(
+    incidents.map((incident) => listIncidentEvidence(incident.incident_id))
+  );
+
+  return evidenceGroups.flat();
 }
 
-export async function getEvidenceTypes() {
-  return apiRequest<EvidenceTypeResponse[]>("/evidence/types/");
+function appendOptionalFormValue(formData: FormData, key: string, value?: string | null) {
+  if (value) {
+    formData.append(key, value);
+  }
+}
+
+export function uploadEvidence(payload: UploadEvidenceRequest) {
+  const formData = new FormData();
+
+  formData.append("incident_id", String(payload.incident_id));
+  formData.append("evidence_type_id", String(payload.evidence_type_id));
+
+  if (payload.file.blob) {
+    formData.append("file", payload.file.blob, payload.file.name);
+  } else if (payload.file.uri) {
+    formData.append("file", {
+      uri: payload.file.uri,
+      name: payload.file.name,
+      type: payload.file.type,
+    } as unknown as Blob);
+  } else {
+    throw new Error("Evidence file is missing.");
+  }
+
+  appendOptionalFormValue(formData, "description", payload.description);
+  appendOptionalFormValue(formData, "evidence_location", payload.evidence_location);
+  appendOptionalFormValue(formData, "evidence_imei", payload.evidence_imei);
+  appendOptionalFormValue(formData, "evidence_device", payload.evidence_device);
+  appendOptionalFormValue(formData, "evidence_activation", payload.evidence_activation);
+
+  return apiRequest<EvidenceResponse>(
+    "/evidence/",
+    {
+      method: "POST",
+      body: formData,
+    },
+    { jsonContentType: false }
+  );
+}
+
+export function downloadEvidence(evidenceId: number) {
+  return apiRequest<EvidenceDownloadResponse>(`/evidence/${evidenceId}/download`);
 }

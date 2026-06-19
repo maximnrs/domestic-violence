@@ -1,12 +1,30 @@
 import type { Evidence } from "../types/legalDashboard";
 import * as api from "./api";
+import {
+  buildEvidenceTypeLookup,
+  mapEvidenceResponse,
+  parseCaseId,
+  parseIncidentId,
+} from "./legalDashboardMappers";
 
 export async function listIncidentEvidence(incidentId: string): Promise<Evidence[]> {
-  return api.listIncidentEvidence(incidentId);
+  const [evidence, evidenceTypes] = await Promise.all([
+    api.listIncidentEvidence(parseIncidentId(incidentId)),
+    api.getEvidenceTypes().catch(() => []),
+  ]);
+  const evidenceTypeLookup = buildEvidenceTypeLookup(evidenceTypes);
+
+  return evidence.map((item) => mapEvidenceResponse(item, evidenceTypeLookup));
 }
 
 export async function listCaseEvidence(caseId: string): Promise<Evidence[]> {
-  return api.listCaseEvidence(caseId);
+  const [evidence, evidenceTypes] = await Promise.all([
+    api.listCaseEvidence(parseCaseId(caseId)),
+    api.getEvidenceTypes().catch(() => []),
+  ]);
+  const evidenceTypeLookup = buildEvidenceTypeLookup(evidenceTypes);
+
+  return evidence.map((item) => mapEvidenceResponse(item, evidenceTypeLookup));
 }
 
 export async function verifyEvidence(evidenceId: string): Promise<{ evidenceId: string; verified: boolean }> {
