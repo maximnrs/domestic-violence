@@ -88,6 +88,9 @@ export function ReportFlowPage({
           ) : null}
 
           <div className="wizard-actions">
+            <Button variant="secondary" type="button" onClick={onTranscriptionStep}>
+              Transcription Demo
+            </Button>
             <Button variant="secondary" type="button" onClick={onCancel}>Cancel</Button>
             <Button
               variant="secondary"

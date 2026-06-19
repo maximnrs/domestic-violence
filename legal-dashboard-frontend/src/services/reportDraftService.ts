@@ -22,17 +22,24 @@ export async function updateReportDraftEvidence(
 export async function requestTranscription(reportDraftId: string, evidenceId: string) {
   void reportDraftId;
   void evidenceId;
+  // TODO junior-dev:
+  // Call requestReportAudioTranscription from transcriptionService after the backend endpoint is ready.
+  // This should be invoked from the report-generation flow only, after evidence is selected.
   throw new Error("Not implemented yet");
 }
 
 export async function getTranscriptionJobStatus(jobId: string): Promise<TranscriptionStatus> {
   void jobId;
+  // TODO junior-dev:
+  // Poll the backend transcription job status here and map the backend response to TranscriptionStatus.
   throw new Error("Not implemented yet");
 }
 
 export async function attachTranscriptToReportDraft(reportDraftId: string, transcriptId: string) {
   void reportDraftId;
   void transcriptId;
+  // TODO junior-dev:
+  // Attach completed transcripts to the draft so generated reports include verified audio text.
   throw new Error("Not implemented yet");
 }
 
