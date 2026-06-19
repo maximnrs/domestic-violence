@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { mockCases, mockReportDraft } from "./data/mockData";
+import { getCases } from "./services/caseService";
 import { LegalDashboardLayout } from "./layout/LegalDashboardLayout";
 import { CaseDetailPage } from "./pages/CaseDetailPage";
 import { CasesPage } from "./pages/CasesPage";
@@ -27,16 +27,26 @@ function parseStep(search: string) {
 
 export default function App() {
   const [route, setRoute] = useState<RouteState>(getRouteState);
-  const [cases] = useState<LegalCase[]>(mockCases);
-  const [selectedCaseId, setSelectedCaseId] = useState(mockReportDraft.selectedCaseId);
-  const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>(
-    mockReportDraft.selectedEvidenceIds
-  );
+  const [cases, setCases] = useState<LegalCase[]>([]);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(undefined);
+  const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([]);
 
   useEffect(() => {
     const handlePopState = () => setRoute(getRouteState());
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const list = await getCases();
+        setCases(list);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load cases", err);
+      }
+    })();
   }, []);
 
   const activeStep = useMemo(() => parseStep(route.search), [route.search]);
