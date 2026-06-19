@@ -387,7 +387,7 @@ export default function CameraEvidenceScreen() {
                   ref={cameraRef}
                   style={styles.camera}
                   facing="back"
-                  mode={mode}
+                  mode={mode === 'photo' ? 'picture' : 'video'}
                   onCameraReady={() => {
                     setCameraReady(true);
                   }}
