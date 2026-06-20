@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getCases } from "./services/caseService";
+import { getCurrentUser, type UserResponse } from "./services/api";
 import { LegalDashboardLayout } from "./layout/LegalDashboardLayout";
 import { CaseDetailPage } from "./pages/CaseDetailPage";
 import { CasesPage } from "./pages/CasesPage";
@@ -27,6 +28,7 @@ function parseStep(search: string) {
 
 export default function App() {
   const [route, setRoute] = useState<RouteState>(getRouteState);
+  const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
   const [cases, setCases] = useState<LegalCase[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(undefined);
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([]);
@@ -40,11 +42,12 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const list = await getCases();
+        const [user, list] = await Promise.all([getCurrentUser(), getCases()]);
+        setCurrentUser(user);
         setCases(list);
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("Failed to load cases", err);
+        console.error("Failed to load dashboard data", err);
       }
     })();
   }, []);
@@ -75,7 +78,12 @@ export default function App() {
   const title = route.path.startsWith("/reports") ? "Report Requests" : "Cases";
 
   return (
-    <LegalDashboardLayout title={title} activePath={route.path} onNavigate={navigate}>
+    <LegalDashboardLayout
+      title={title}
+      activePath={route.path}
+      currentUser={currentUser}
+      onNavigate={navigate}
+    >
       {route.path === "/cases" ? (
         <CasesPage cases={cases} onOpenCase={(caseId) => navigate(`/cases/${caseId}`)} />
       ) : null}
