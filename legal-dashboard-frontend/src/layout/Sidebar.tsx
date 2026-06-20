@@ -1,7 +1,9 @@
+import type { UserResponse } from "../services/api";
 import { Icon } from "../components/ui/Icon";
 
 type SidebarProps = {
   activePath: string;
+  currentUser: UserResponse | null;
   onNavigate: (path: string) => void;
 };
 
@@ -13,7 +15,28 @@ const navItems = [
   { label: "Settings", path: "/settings", icon: "settings" },
 ] as const;
 
-export function Sidebar({ activePath, onNavigate }: SidebarProps) {
+function getUserDisplayName(user: UserResponse | null) {
+  if (!user) {
+    return "Loading user";
+  }
+
+  return `${user.first_name} ${user.last_name}`.trim() || user.email;
+}
+
+function getUserInitials(user: UserResponse | null) {
+  if (!user) {
+    return "LA";
+  }
+
+  const initials = [user.first_name, user.last_name]
+    .map((name) => name?.[0])
+    .filter(Boolean)
+    .join("");
+
+  return (initials || user.email.slice(0, 2)).toUpperCase();
+}
+
+export function Sidebar({ activePath, currentUser, onNavigate }: SidebarProps) {
   function isActive(path: string) {
     if (path === "/cases") {
       return activePath === "/cases" || activePath.startsWith("/cases/");
@@ -53,10 +76,10 @@ export function Sidebar({ activePath, onNavigate }: SidebarProps) {
       </nav>
 
       <div className="sidebar-user">
-        <div className="avatar">LA</div>
+        <div className="avatar">{getUserInitials(currentUser)}</div>
         <div>
-          <strong>Legal Authority</strong>
-          <span>Officer</span>
+          <strong>{getUserDisplayName(currentUser)}</strong>
+          <span>{currentUser?.email ?? "Signing in..."}</span>
         </div>
       </div>
     </aside>

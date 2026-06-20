@@ -1,10 +1,20 @@
+import type { UserResponse } from "../services/api";
 import { Icon } from "../components/ui/Icon";
 
 type TopBarProps = {
   title: string;
+  currentUser: UserResponse | null;
 };
 
-export function TopBar({ title }: TopBarProps) {
+function getUserDisplayName(user: UserResponse | null) {
+  if (!user) {
+    return "Signing in...";
+  }
+
+  return `${user.first_name} ${user.last_name}`.trim() || user.email;
+}
+
+export function TopBar({ title, currentUser }: TopBarProps) {
   return (
     <header className="topbar">
       <h1>{title}</h1>
@@ -19,7 +29,7 @@ export function TopBar({ title }: TopBarProps) {
         <button className="icon-button" type="button" aria-label="Secure sign out">
           <Icon name="logOut" size={18} />
         </button>
-        <div className="officer-chip">Legal Authority Officer</div>
+        <div className="officer-chip">{getUserDisplayName(currentUser)}</div>
       </div>
     </header>
   );
