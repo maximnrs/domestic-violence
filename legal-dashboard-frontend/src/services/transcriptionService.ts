@@ -1,4 +1,5 @@
 import type { TranscriptionStatus } from "../types/legalDashboard";
+import { transcribeEvidence, transcribeDemo } from "./api";
 
 export type DemoTranscriptionRequest = {
   file: File;
@@ -12,42 +13,44 @@ export type TranscriptionResult = {
   status: TranscriptionStatus;
   text: string;
   requestedAt: string;
+  language?: string;
+  languageProbability?: number;
 };
-
-const DEMO_TRANSCRIPT_TEXT =
-  "Demo transcript: The caller describes a recent incident, references the selected report evidence, and confirms the audio should be included in the legal report package.";
-
-function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
 
 export async function transcribeReportAudioForDemo({
   file,
 }: DemoTranscriptionRequest): Promise<TranscriptionResult> {
-  // TODO junior-dev:
-  // Replace this mock with a backend upload call that runs only during report generation.
-  // The frontend should send FormData to the backend. The backend should hold the OpenAI
-  // API key and call Whisper/transcriptions from there, never directly from the browser.
-  await wait(700);
+  // Sends the uploaded file to the backend demo endpoint, which forwards it
+  // to the Whisper service. No evidence record is created in the database.
+  const result = await transcribeDemo(file);
 
   return {
     id: `demo-transcript-${Date.now()}`,
     fileName: file.name,
     status: "completed",
-    text: DEMO_TRANSCRIPT_TEXT,
+    text: result.text,
     requestedAt: new Date().toISOString(),
+    language: result.language,
+    languageProbability: result.language_probability,
   };
 }
 
-export async function requestReportAudioTranscription(
-  request: DemoTranscriptionRequest
-): Promise<TranscriptionResult> {
-  void request;
-  // TODO junior-dev:
-  // Implement the production report-flow transcription request here.
-  // Suggested contract:
-  // POST /report-drafts/:reportDraftId/transcriptions
-  // multipart/form-data: audio file, evidenceId, caseId if needed
-  // response: transcript id, status, text, timestamps, model metadata
-  throw new Error("Report audio transcription is not implemented yet.");
+export async function requestReportAudioTranscription({
+  evidenceId,
+}: {
+  evidenceId: string;
+}): Promise<TranscriptionResult> {
+  // Sends the evidence ID to the backend, which downloads and decrypts
+  // the audio from MinIO and sends it to the Whisper service.
+  const result = await transcribeEvidence(parseInt(evidenceId, 10));
+
+  return {
+    id: `transcript-${result.evidence_id}-${Date.now()}`,
+    fileName: `evidence-${result.evidence_id}`,
+    status: "completed",
+    text: result.text,
+    requestedAt: new Date().toISOString(),
+    language: result.language,
+    languageProbability: result.language_probability,
+  };
 }

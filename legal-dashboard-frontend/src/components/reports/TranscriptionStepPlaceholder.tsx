@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import {
   transcribeReportAudioForDemo,
+  requestReportAudioTranscription,
   type TranscriptionResult,
 } from "../../services/transcriptionService";
 import type { AudioEvidence, TranscriptionStatus } from "../../types/legalDashboard";
@@ -25,6 +26,14 @@ export function TranscriptionStepPlaceholder({
   audioEvidence,
   status = "not_requested",
 }: TranscriptionStepPlaceholderProps) {
+  // Tracks the transcript result for each evidence item by its ID
+  const [transcripts, setTranscripts] = useState<Record<string, TranscriptionResult>>({});
+  // Tracks which evidence items are currently being transcribed
+  const [transcribing, setTranscribing] = useState<Record<string, boolean>>({});
+  // Tracks any transcription errors per evidence item
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Demo upload state (kept for showcase day)
   const [demoAudioFile, setDemoAudioFile] = useState<File | null>(null);
   const [demoTranscript, setDemoTranscript] = useState<TranscriptionResult | null>(null);
   const [demoError, setDemoError] = useState<string | null>(null);
@@ -42,6 +51,25 @@ export function TranscriptionStepPlaceholder({
     };
   }, [demoAudioUrl]);
 
+  // Sends a selected evidence item to the backend, which downloads the audio
+  // from the database and sends it to the Whisper service for transcription.
+  async function handleTranscribeEvidence(evidenceId: string) {
+    setTranscribing((prev) => ({ ...prev, [evidenceId]: true }));
+    setErrors((prev) => ({ ...prev, [evidenceId]: "" }));
+
+    try {
+      const result = await requestReportAudioTranscription({ evidenceId });
+      setTranscripts((prev) => ({ ...prev, [evidenceId]: result }));
+    } catch (err) {
+      setErrors((prev) => ({
+        ...prev,
+        [evidenceId]: err instanceof Error ? err.message : "Transcription failed.",
+      }));
+    } finally {
+      setTranscribing((prev) => ({ ...prev, [evidenceId]: false }));
+    }
+  }
+
   function handleDemoAudioChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setDemoAudioFile(file);
@@ -58,8 +86,7 @@ export function TranscriptionStepPlaceholder({
     setDemoError(null);
 
     try {
-      // TODO junior-dev:
-      // Swap this demo helper for requestReportAudioTranscription once the backend endpoint exists.
+      // Calls the real backend demo endpoint instead of returning mock data
       const result = await transcribeReportAudioForDemo({ file: demoAudioFile });
       setDemoTranscript(result);
     } catch (err) {
@@ -74,13 +101,6 @@ export function TranscriptionStepPlaceholder({
       <h2>Transcribe Audio Evidence</h2>
       <p>Audio transcription will be requested before the report package is verified.</p>
 
-      {/* TODO junior-dev:
-          1. Send selected audio evidence to backend transcription endpoint.
-          2. Poll transcription job status.
-          3. Display completed transcript or error.
-          4. Attach transcript result to the report draft.
-          5. Return control to the report flow.
-      */}
       <div className="transcription-layout">
         <section>
           <h3>Selected audio evidence</h3>
@@ -107,11 +127,50 @@ export function TranscriptionStepPlaceholder({
                     <span>Timestamp: {item.capturedAt}</span>
                     <span>Hash status: {item.hashVerified ? "Verified" : "Pending"}</span>
                   </div>
+
+                  {/* Transcription controls for this evidence item */}
+                  <div className="evidence-transcription">
+                    <StatusPill
+                      status={
+                        transcribing[item.id]
+                          ? "processing"
+                          : transcripts[item.id]
+                          ? "completed"
+                          : errors[item.id]
+                          ? "failed"
+                          : "not_requested"
+                      }
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => handleTranscribeEvidence(item.id)}
+                      disabled={transcribing[item.id] || !!transcripts[item.id]}
+                    >
+                      {transcribing[item.id]
+                        ? "Transcribing..."
+                        : transcripts[item.id]
+                        ? "Transcribed"
+                        : "Transcribe"}
+                    </Button>
+                  </div>
+
+                  {errors[item.id] ? (
+                    <div className="transcript-error">{errors[item.id]}</div>
+                  ) : null}
+
+                  {transcripts[item.id] ? (
+                    <div className="transcript-preview">
+                      <span className="muted-label">Transcript</span>
+                      <p>{transcripts[item.id].text}</p>
+                    </div>
+                  ) : null}
                 </Card>
               ))}
             </div>
           )}
 
+          {/* Demo upload — kept for showcase day. Uses the real Whisper backend
+              but does not require going through the full report flow. */}
           <section className="demo-transcription-panel" aria-label="Demo transcription upload">
             <div className="demo-panel-heading">
               <div>
@@ -121,11 +180,6 @@ export function TranscriptionStepPlaceholder({
               <StatusPill status={demoTranscript?.status ?? (isDemoTranscribing ? "processing" : "not_requested")} />
             </div>
 
-            {/* TODO junior-dev:
-                Keep this upload demo available for showcase day, but wire the production path
-                through report draft generation only. The real implementation should reuse the
-                selected report evidence above instead of treating this as a permanent standalone tool.
-            */}
             <label className="audio-upload-target">
               <span>Choose an audio file</span>
               <input
