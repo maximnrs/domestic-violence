@@ -1,9 +1,13 @@
 import os
 import tempfile
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from faster_whisper import WhisperModel
 
 app = Flask(__name__)
+
+# Allow the legal dashboard (running locally in the browser) to call this service directly
+CORS(app)
 
 model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8")
 
@@ -24,11 +28,22 @@ def transcribe():
 
     try:
         segments, info = model.transcribe(tmp_path, beam_size=5)
-        text = " ".join(segment.text.strip() for segment in segments)
+
+        # Convert the generator to a list so we can use it twice (full text + segments)
+        segment_list = list(segments)
+
         return jsonify({
-            "text": text,
+            "text": " ".join(s.text.strip() for s in segment_list),
             "language": info.language,
             "language_probability": round(info.language_probability, 4),
+            "segments": [
+                {
+                    "start": round(s.start, 2),
+                    "end": round(s.end, 2),
+                    "text": s.text.strip(),
+                }
+                for s in segment_list
+            ],
         })
     finally:
         os.remove(tmp_path)

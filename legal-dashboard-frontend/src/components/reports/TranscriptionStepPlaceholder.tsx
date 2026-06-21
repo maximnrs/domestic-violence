@@ -3,11 +3,37 @@ import {
   transcribeReportAudioForDemo,
   requestReportAudioTranscription,
   type TranscriptionResult,
+  type TranscriptionSegment,
 } from "../../services/transcriptionService";
 import type { AudioEvidence, TranscriptionStatus } from "../../types/legalDashboard";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { StatusPill } from "../ui/StatusPill";
+
+// Renders transcript segments with timestamps, or falls back to plain text
+function TranscriptSegments({
+  segments,
+  fallbackText,
+}: {
+  segments?: TranscriptionSegment[];
+  fallbackText: string;
+}) {
+  if (!segments || segments.length === 0) {
+    return <p>{fallbackText}</p>;
+  }
+  return (
+    <div className="transcript-segments">
+      {segments.map((seg, i) => (
+        <div key={i} className="transcript-segment">
+          <span className="segment-timestamp">
+            [{seg.start.toFixed(2)}s – {seg.end.toFixed(2)}s]
+          </span>
+          <span className="segment-text">{seg.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type TranscriptionStepPlaceholderProps = {
   audioEvidence: AudioEvidence[];
@@ -216,7 +242,10 @@ export function TranscriptionStepPlaceholder({
               {demoTranscript ? (
                 <>
                   <strong>{demoTranscript.fileName}</strong>
-                  <p>{demoTranscript.text}</p>
+                  {demoTranscript.language ? (
+                    <span className="muted-label"> · Language: {demoTranscript.language.toUpperCase()}</span>
+                  ) : null}
+                  <TranscriptSegments segments={demoTranscript.segments} fallbackText={demoTranscript.text} />
                 </>
               ) : (
                 <p>The transcript will appear here after the demo upload is processed.</p>
@@ -226,6 +255,7 @@ export function TranscriptionStepPlaceholder({
         </section>
 
         <aside className="status-panel">
+
           <span className="muted-label">Transcription status</span>
           <StatusPill status={status} />
           <div className="status-options" aria-label="Possible transcription states">
