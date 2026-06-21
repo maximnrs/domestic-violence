@@ -202,7 +202,7 @@ export function createIncident(payload: IncidentCreateRequest) {
 }
 
 export function getEvidenceTypes() {
-  return apiRequest<EvidenceTypeResponse[]>("/evidence/types/");
+  return apiRequest<EvidenceTypeResponse[]>("/evidence-types/");
 }
 
 export function listIncidentEvidence(incidentId: number) {
