@@ -1,7 +1,7 @@
-from datetime import datetime
-from sqlalchemy import String, DateTime, Integer, ForeignKey, Text, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, DateTime, Integer, ForeignKey, Text
+from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
+from datetime import datetime
 
 class Evidence(Base):
     __tablename__ = "evidence"
@@ -15,9 +15,15 @@ class Evidence(Base):
     evidence_imei: Mapped[str | None] = mapped_column(String(50), nullable=True)
     evidence_device: Mapped[str | None] = mapped_column(String(100), nullable=True)
     evidence_activation: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    file_path: Mapped[str] = mapped_column(String(500), nullable=False)  # path in MinIO
-    file_hash: Mapped[str] = mapped_column(String(500), nullable=False)  # HMAC-SHA-256
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default="CURRENT_TIMESTAMP")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-# encryption: Mapped["Encryption"] = relationship("Encryption", uselist=False, back_populates="evidence")
+    # Trusted timestamp fields
+    timestamp_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    timestamp_authority: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    timestamp_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    timestamp_hash_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    timestamp_message_imprint: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    timestamp_nonce: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    timestamp_time: Mapped[str | None] = mapped_column(String(50), nullable=True)
