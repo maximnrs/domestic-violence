@@ -16,7 +16,6 @@ export function CasesTable({ cases, onOpenCase }: CasesTableProps) {
             <th>Case ID</th>
             <th>Survivor Alias</th>
             <th>Status</th>
-            <th>Last Incident</th>
             <th>Updated</th>
             <th aria-label="Actions" />
           </tr>
@@ -29,7 +28,6 @@ export function CasesTable({ cases, onOpenCase }: CasesTableProps) {
               <td>
                 <StatusPill status={caseRecord.status} />
               </td>
-              <td>{caseRecord.lastIncidentAt}</td>
               <td>{caseRecord.updatedAt}</td>
               <td className="row-action">
                 <Icon name="chevronRight" size={18} />

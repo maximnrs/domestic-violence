@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CaseSummaryCard } from "../components/cases/CaseSummaryCard";
 import { EvidenceSecurityNotice } from "../components/evidence/EvidenceSecurityNotice";
 import { EvidenceTable } from "../components/evidence/EvidenceTable";
@@ -19,6 +19,19 @@ export function CaseDetailPage({ legalCase, onStartReport }: CaseDetailPageProps
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | undefined>(
     legalCase?.incidents[0]?.id
   );
+
+  useEffect(() => {
+    if (!legalCase?.incidents.length) {
+      setSelectedIncidentId(undefined);
+      return;
+    }
+
+    setSelectedIncidentId((currentId) =>
+      legalCase.incidents.some((incident) => incident.id === currentId)
+        ? currentId
+        : legalCase.incidents[0].id
+    );
+  }, [legalCase]);
 
   const selectedIncident = useMemo(
     () => legalCase?.incidents.find((incident) => incident.id === selectedIncidentId),

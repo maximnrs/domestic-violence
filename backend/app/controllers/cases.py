@@ -57,6 +57,16 @@ async def get_my_case(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 @router.get(
+    "/admin/",
+    response_model=list[CaseResponse],
+)
+async def get_admin_cases(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await case_service.get_all_cases(db)
+
+@router.get(
     "/{case_id}",
     response_model=CaseResponse,
     responses={404: {"description": "Case not found"}},

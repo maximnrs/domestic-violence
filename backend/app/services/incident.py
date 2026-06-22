@@ -35,6 +35,12 @@ async def get_incidents(db: AsyncSession, user_id: int, case_id: int) -> list[In
     )
     return result.scalars().all()
 
+async def get_incidents_for_case(db: AsyncSession, case_id: int) -> list[Incident]:
+    result = await db.execute(
+        select(Incident).where(Incident.case_id == case_id)
+    )
+    return result.scalars().all()
+
 async def get_incident(db: AsyncSession, user_id: int, incident_id: int) -> Incident:
     result = await db.execute(
         select(Incident).where(Incident.incident_id == incident_id)

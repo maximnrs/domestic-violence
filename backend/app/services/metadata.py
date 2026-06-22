@@ -96,3 +96,9 @@ async def get_incident_evidence(db: AsyncSession, incident_id: int, user_id: int
         )
     )
     return result.scalars().all()
+
+async def get_incident_evidence_for_admin(db: AsyncSession, incident_id: int) -> list[Evidence]:
+    result = await db.execute(
+        select(Evidence).where(Evidence.incident_id == incident_id)
+    )
+    return result.scalars().all()

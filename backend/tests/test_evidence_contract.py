@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -21,6 +22,7 @@ from app.controllers import evidencetype as evidencetype_controller
 from app.models.schemas import EvidenceCreate
 from app.services import encryption as encryption_service
 from app.services import evidence as evidence_service
+from app.services import metadata as metadata_service
 
 
 def cryptography_available() -> bool:
@@ -195,6 +197,67 @@ def test_user_can_upload_to_authorized_incident(monkeypatch):
     assert result is expected
     assert upload_file.read_called is True
     upload_mock.assert_awaited_once()
+
+def test_get_admin_incident_evidence_uses_incident_id_without_ownership_filter(monkeypatch):
+    app = FastAPI()
+    app.include_router(evidence_controller.router)
+
+    async def fake_db():
+        yield object()
+
+    app.dependency_overrides[evidence_controller.get_db] = fake_db
+    app.dependency_overrides[evidence_controller.get_current_user] = lambda: SimpleNamespace(
+        user_id=20
+    )
+
+    get_incident_evidence_for_admin = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                evidence_id=40,
+                incident_id=30,
+                user_id=21,
+                evidence_type_id=1,
+                file_name="audio.m4a",
+                evidence_location=None,
+                evidence_imei=None,
+                evidence_device=None,
+                evidence_activation=None,
+                file_path="evidence/user_21/incident_30/audio.bin",
+                file_hash="abc123",
+                created_at=datetime(2026, 1, 4, 12, 30),
+                description=None,
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        metadata_service,
+        "get_incident_evidence_for_admin",
+        get_incident_evidence_for_admin,
+    )
+
+    response = TestClient(app).get("/evidence/admin/?incident_id=30")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "evidence_id": 40,
+            "incident_id": 30,
+            "user_id": 21,
+            "evidence_type_id": 1,
+            "file_name": "audio.m4a",
+            "evidence_location": None,
+            "evidence_imei": None,
+            "evidence_device": None,
+            "evidence_activation": None,
+            "file_path": "evidence/user_21/incident_30/audio.bin",
+            "file_hash": "abc123",
+            "created_at": "2026-01-04T12:30:00",
+            "description": None,
+        }
+    ]
+    get_incident_evidence_for_admin.assert_awaited_once()
+    _, incident_id = get_incident_evidence_for_admin.await_args.args
+    assert incident_id == 30
 
 
 @pytest.mark.skipif(

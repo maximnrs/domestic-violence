@@ -179,7 +179,7 @@ export function getCurrentUser() {
 }
 
 export function getCases() {
-  return apiRequest<CaseResponse[]>("/cases/");
+  return apiRequest<CaseResponse[]>("/cases/admin/");
 }
 
 export function getCase(caseId: number) {
@@ -187,7 +187,7 @@ export function getCase(caseId: number) {
 }
 
 export function listIncidents(caseId: number) {
-  return apiRequest<IncidentResponse[]>(`/incidents/?case_id=${caseId}`);
+  return apiRequest<IncidentResponse[]>(`/incidents/admin/?case_id=${caseId}`);
 }
 
 export function getIncident(incidentId: number) {
@@ -206,7 +206,7 @@ export function getEvidenceTypes() {
 }
 
 export function listIncidentEvidence(incidentId: number) {
-  return apiRequest<EvidenceResponse[]>(`/evidence/?incident_id=${incidentId}`);
+  return apiRequest<EvidenceResponse[]>(`/evidence/admin/?incident_id=${incidentId}`);
 }
 
 export async function listCaseEvidence(caseId: number) {
