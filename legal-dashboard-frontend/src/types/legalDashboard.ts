@@ -29,6 +29,8 @@ export type Incident = {
   caseId: string;
   dateTime: string;
   type: string;
+  location?: string;
+  description?: string;
   status: IncidentStatus;
   evidence: Evidence[];
 };

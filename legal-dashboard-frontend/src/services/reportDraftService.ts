@@ -1,5 +1,9 @@
 import { mockReportDraft } from "../data/mockData";
-import type { ReportDraft, TranscriptionStatus } from "../types/legalDashboard";
+import type { Evidence, LegalCase, ReportDraft, TranscriptionStatus } from "../types/legalDashboard";
+import type { TranscriptionResult } from "./transcriptionService";
+import { hydrateReportCaseData } from "./legalReportApi";
+import { buildLegalReportDocument } from "./legalReportMapper";
+import { downloadLegalReportPdf } from "./legalReportPdfRenderer";
 
 export async function createReportDraft(caseId: string): Promise<ReportDraft> {
   return Promise.resolve({
@@ -43,16 +47,25 @@ export async function attachTranscriptToReportDraft(reportDraftId: string, trans
   throw new Error("Not implemented yet");
 }
 
-export async function generateLegalReportPackage(reportDraftId: string) {
-  void reportDraftId;
-  // TODO report-generation:
-  // This will eventually request the backend PDF/package generation endpoint.
-  // Proposed PDF package sections for dev selection:
-  // 1. Case header: case ID, survivor alias, status, created date, latest incident date.
-  // 2. Incident summary: incident IDs, date/time, type, evidence counts, review status.
-  // 3. Selected evidence manifest: evidence IDs, type, filename, captured timestamp, source, size.
-  // 4. Integrity appendix: hash verification, timestamp verification, audit trail availability.
-  // 5. Audio transcript appendix: include only completed verified transcripts, never placeholder text.
-  // 6. Officer review notes and package generation audit metadata.
-  throw new Error("Not implemented yet");
+export async function generateLegalReportPackage({
+  caseRecord,
+  selectedEvidence,
+  selectedEvidenceIds,
+  transcriptsByEvidenceId,
+}: {
+  caseRecord: LegalCase;
+  selectedEvidence: Evidence[];
+  selectedEvidenceIds: string[];
+  transcriptsByEvidenceId: Record<string, TranscriptionResult>;
+}) {
+  const hydrated = await hydrateReportCaseData({ caseRecord, selectedEvidenceIds });
+  const report = buildLegalReportDocument({
+    caseRecord: hydrated.caseRecord,
+    selectedEvidence: hydrated.selectedEvidence.length > 0 ? hydrated.selectedEvidence : selectedEvidence,
+    transcriptsByEvidenceId,
+    warnings: hydrated.warnings,
+  });
+
+  downloadLegalReportPdf(report);
+  return report;
 }

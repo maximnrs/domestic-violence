@@ -194,6 +194,8 @@ export function mapIncidentResponse(
     caseId: String(incident.case_id),
     dateTime: formatDateTime(incident.incident_date, incident.incident_time),
     type: incident.incident_type ? incidentTypeLabels[incident.incident_type] : "Unspecified",
+    location: incident.location ?? undefined,
+    description: incident.description ?? undefined,
     status: mapIncidentStatus(incident),
     evidence,
   };

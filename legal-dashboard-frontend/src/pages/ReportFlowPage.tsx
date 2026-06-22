@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Evidence, LegalCase, ReportFlowStep } from "../types/legalDashboard";
 import { ReportFlowStepper } from "../components/reports/ReportFlowStepper";
 import { ReviewPackageStep } from "../components/reports/ReviewPackageStep";
@@ -5,12 +6,15 @@ import { SelectCaseStep } from "../components/reports/SelectCaseStep";
 import { SelectEvidenceStep } from "../components/reports/SelectEvidenceStep";
 import { VerifyIntegrityStep } from "../components/reports/VerifyIntegrityStep";
 import { Button } from "../components/ui/Button";
+import type { TranscriptionResult } from "../services/transcriptionService";
+import { generateLegalReportPackage } from "../services/reportDraftService";
 
 type ReportFlowPageProps = {
   cases: LegalCase[];
   activeStep: number;
   selectedCaseId?: string;
   selectedEvidenceIds: string[];
+  transcriptsByEvidenceId: Record<string, TranscriptionResult>;
   onSelectCase: (caseId: string) => void;
   onToggleEvidence: (evidenceId: string) => void;
   onStepChange: (step: number) => void;
@@ -32,21 +36,47 @@ export function ReportFlowPage({
   activeStep,
   selectedCaseId,
   selectedEvidenceIds,
+  transcriptsByEvidenceId,
   onSelectCase,
   onToggleEvidence,
   onStepChange,
   onCancel,
   onTranscriptionStep,
 }: ReportFlowPageProps) {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const selectedCase = cases.find((caseRecord) => caseRecord.id === selectedCaseId);
   const selectedEvidence: Evidence[] =
     selectedCase?.incidents
       .flatMap((incident) => incident.evidence)
       .filter((item) => selectedEvidenceIds.includes(item.id)) ?? [];
 
-  function handleNext() {
+  async function handleNext() {
     if (activeStep === 1) {
       onTranscriptionStep();
+      return;
+    }
+
+    if (activeStep === 5) {
+      if (!selectedCase) {
+        setGenerationError("Select a case before generating a report package.");
+        return;
+      }
+
+      setIsGenerating(true);
+      setGenerationError(null);
+      try {
+        await generateLegalReportPackage({
+          caseRecord: selectedCase,
+          selectedEvidence,
+          selectedEvidenceIds,
+          transcriptsByEvidenceId,
+        });
+      } catch (err) {
+        setGenerationError(err instanceof Error ? err.message : "Report generation failed.");
+      } finally {
+        setIsGenerating(false);
+      }
       return;
     }
 
@@ -83,7 +113,8 @@ export function ReportFlowPage({
 
           {activeStep === 5 ? (
             <div className="generation-note">
-              PDF/package generation is intentionally reserved for the backend implementation.
+              PDF package ready.
+              {generationError ? <div className="transcript-error">{generationError}</div> : null}
             </div>
           ) : null}
 
@@ -100,8 +131,12 @@ export function ReportFlowPage({
             >
               Back
             </Button>
-            <Button type="button" onClick={handleNext}>
-              {activeStep === 5 ? "Reserve Generation" : "Next"}
+            <Button type="button" onClick={handleNext} disabled={isGenerating || (activeStep === 5 && !selectedCase)}>
+              {activeStep === 5
+                ? isGenerating
+                  ? "Generating..."
+                  : "Generate Legal Report Package"
+                : "Next"}
             </Button>
           </div>
         </main>

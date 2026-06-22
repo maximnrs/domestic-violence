@@ -10,6 +10,8 @@ import { StatusPill } from "../ui/StatusPill";
 
 type TranscriptionStepPlaceholderProps = {
   audioEvidence: AudioEvidence[];
+  transcripts: Record<string, TranscriptionResult>;
+  onTranscriptComplete: (evidenceId: string, transcript: TranscriptionResult) => void;
   status?: TranscriptionStatus;
 };
 
@@ -23,10 +25,10 @@ const transcriptionStates: TranscriptionStatus[] = [
 
 export function TranscriptionStepPlaceholder({
   audioEvidence,
+  transcripts,
+  onTranscriptComplete,
   status = "not_requested",
 }: TranscriptionStepPlaceholderProps) {
-  // Tracks the transcript result for each evidence item by its ID
-  const [transcripts, setTranscripts] = useState<Record<string, TranscriptionResult>>({});
   // Tracks which evidence items are currently being transcribed
   const [transcribing, setTranscribing] = useState<Record<string, boolean>>({});
   // Tracks any transcription errors per evidence item
@@ -40,7 +42,7 @@ export function TranscriptionStepPlaceholder({
 
     try {
       const result = await requestReportAudioTranscription({ evidenceId, fileName });
-      setTranscripts((prev) => ({ ...prev, [evidenceId]: result }));
+      onTranscriptComplete(evidenceId, result);
     } catch (err) {
       setErrors((prev) => ({
         ...prev,

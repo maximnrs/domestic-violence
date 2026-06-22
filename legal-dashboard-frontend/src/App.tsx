@@ -8,6 +8,7 @@ import { ReportFlowPage } from "./pages/ReportFlowPage";
 import { TranscriptionStepPage } from "./pages/TranscriptionStepPage";
 import type { LegalCase } from "./types/legalDashboard";
 import { Card } from "./components/ui/Card";
+import type { TranscriptionResult } from "./services/transcriptionService";
 
 type RouteState = {
   path: string;
@@ -33,6 +34,7 @@ export default function App() {
   const [hydratedCaseIds, setHydratedCaseIds] = useState<string[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(undefined);
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([]);
+  const [transcriptsByEvidenceId, setTranscriptsByEvidenceId] = useState<Record<string, TranscriptionResult>>({});
 
   useEffect(() => {
     const handlePopState = () => setRoute(getRouteState());
@@ -111,6 +113,7 @@ export default function App() {
     setSelectedCaseId(caseId);
     const legalCase = cases.find((caseRecord) => caseRecord.id === caseId);
     setSelectedEvidenceIds(legalCase?.incidents[0]?.evidence.slice(0, 2).map((item) => item.id) ?? []);
+    setTranscriptsByEvidenceId({});
   }
 
   function handleToggleEvidence(evidenceId: string) {
@@ -152,6 +155,7 @@ export default function App() {
           activeStep={activeStep}
           selectedCaseId={selectedCaseId}
           selectedEvidenceIds={selectedEvidenceIds}
+          transcriptsByEvidenceId={transcriptsByEvidenceId}
           onSelectCase={handleSelectCase}
           onToggleEvidence={handleToggleEvidence}
           onStepChange={(step) => navigate(`/reports/new?step=${step}`)}
@@ -165,6 +169,10 @@ export default function App() {
           cases={cases}
           selectedCaseId={selectedCaseId}
           selectedEvidenceIds={selectedEvidenceIds}
+          transcriptsByEvidenceId={transcriptsByEvidenceId}
+          onTranscriptComplete={(evidenceId, transcript) =>
+            setTranscriptsByEvidenceId((current) => ({ ...current, [evidenceId]: transcript }))
+          }
           onBack={() => navigate("/reports/new?step=1")}
           onNext={() => navigate("/reports/new?step=3")}
           onCancel={() => navigate("/cases")}

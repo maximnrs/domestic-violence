@@ -3,11 +3,14 @@ import { ReportFlowStepper } from "../components/reports/ReportFlowStepper";
 import { reportSteps } from "./ReportFlowPage";
 import { TranscriptionStepPlaceholder } from "../components/reports/TranscriptionStepPlaceholder";
 import { Button } from "../components/ui/Button";
+import type { TranscriptionResult } from "../services/transcriptionService";
 
 type TranscriptionStepPageProps = {
   cases: LegalCase[];
   selectedCaseId?: string;
   selectedEvidenceIds: string[];
+  transcriptsByEvidenceId: Record<string, TranscriptionResult>;
+  onTranscriptComplete: (evidenceId: string, transcript: TranscriptionResult) => void;
   onBack: () => void;
   onNext: () => void;
   onCancel: () => void;
@@ -17,6 +20,8 @@ export function TranscriptionStepPage({
   cases,
   selectedCaseId,
   selectedEvidenceIds,
+  transcriptsByEvidenceId,
+  onTranscriptComplete,
   onBack,
   onNext,
   onCancel,
@@ -40,7 +45,11 @@ export function TranscriptionStepPage({
       <div className="report-workspace">
         <ReportFlowStepper steps={reportSteps} activeStep={2} />
         <main className="report-content">
-          <TranscriptionStepPlaceholder audioEvidence={audioEvidence} />
+          <TranscriptionStepPlaceholder
+            audioEvidence={audioEvidence}
+            transcripts={transcriptsByEvidenceId}
+            onTranscriptComplete={onTranscriptComplete}
+          />
           <div className="wizard-actions">
             <Button variant="secondary" type="button" onClick={onCancel}>Cancel</Button>
             <Button variant="secondary" type="button" onClick={onBack}>Back</Button>
