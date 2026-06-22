@@ -41,6 +41,31 @@ function formatDateTime(date: string | null, time?: string | null) {
   return time ? `${date} · ${time.slice(0, 5)}` : date;
 }
 
+function formatReadableTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  const numericValue = Number(trimmedValue);
+  const date =
+    /^\d{10}$/.test(trimmedValue) || /^\d{13}$/.test(trimmedValue)
+      ? new Date(/^\d{10}$/.test(trimmedValue) ? numericValue * 1000 : numericValue)
+      : new Date(trimmedValue.replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
+
+  if (Number.isNaN(date.getTime())) {
+    return trimmedValue;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
 function getEvidenceTitle(typeName: string | undefined, fileName: string) {
   if (typeName === WRITTEN_NOTE_TYPE_NAME) {
     return 'Written note';
@@ -71,6 +96,26 @@ function getEvidenceIconName(typeName: string | undefined): keyof typeof Ionicon
   }
 
   return 'document-outline';
+}
+
+function formatEvidenceType(typeName: string | undefined) {
+  if (!typeName) {
+    return null;
+  }
+
+  return typeName
+    .split('_')
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(' ');
+}
+
+function formatTrustedTimestamp(item: EvidenceResponse) {
+  if (!item.timestamp_time) {
+    return null;
+  }
+
+  return formatReadableTimestamp(item.timestamp_time);
 }
 
 type StatusPanelProps = {
@@ -366,7 +411,7 @@ export default function IncidentDetailScreen() {
               value={formatDateTime(incident.incident_date, incident.incident_time)}
             />
             <MetadataRow label="Location" value={incident.location} />
-            <MetadataRow label="Created" value={incident.creation_date} />
+            <MetadataRow label="Created" value={formatReadableTimestamp(incident.creation_date)} />
             {incident.description ? (
               <Text style={styles.description}>{incident.description}</Text>
             ) : null}
@@ -426,6 +471,8 @@ export default function IncidentDetailScreen() {
               const noteContent = noteContentById[item.evidence_id];
               const noteError = noteErrorById[item.evidence_id];
               const evidenceTitle = getEvidenceTitle(typeName, item.file_name);
+              const trustedTimestamp = formatTrustedTimestamp(item);
+              const evidenceTypeLabel = formatEvidenceType(typeName);
 
               return (
                 <Pressable
@@ -454,9 +501,13 @@ export default function IncidentDetailScreen() {
                         />
                       ) : null}
                     </View>
-                    <Text style={styles.evidenceMeta}>Created {item.created_at}</Text>
                     <Text style={styles.evidenceMeta}>
-                      {typeName ? `Type ${typeName}` : `Type ID #${item.evidence_type_id}`}
+                      Created {trustedTimestamp ?? formatReadableTimestamp(item.created_at)}
+                    </Text>
+                    <Text style={styles.evidenceMeta}>
+                      {evidenceTypeLabel
+                        ? `Type ${evidenceTypeLabel}`
+                        : `Type ID #${item.evidence_type_id}`}
                     </Text>
                     {(isWrittenNote || isVoiceNote) && item.file_name ? (
                       <Text style={styles.evidenceMeta}>File {item.file_name}</Text>

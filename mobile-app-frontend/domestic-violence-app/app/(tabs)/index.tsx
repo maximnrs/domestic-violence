@@ -86,6 +86,10 @@ function formatEvidenceMeta(evidence: EvidenceResponse, incident: IncidentRespon
   return evidence.file_name || formatIncidentLabel(incident);
 }
 
+function evidenceTimelineValue(evidence: EvidenceResponse) {
+  return evidence.timestamp_time ?? evidence.created_at;
+}
+
 function parseEvidenceTimestamp(value: string) {
   const normalizedValue = value.trim().replace(' ', 'T');
   const timestampParts = normalizedValue.match(
@@ -196,8 +200,8 @@ export default function HomeScreen() {
         .sort(
           (first, second) => {
             const timestampDifference =
-              parseEvidenceTimestamp(second.evidence.created_at) -
-              parseEvidenceTimestamp(first.evidence.created_at);
+              parseEvidenceTimestamp(evidenceTimelineValue(second.evidence)) -
+              parseEvidenceTimestamp(evidenceTimelineValue(first.evidence));
 
             if (timestampDifference !== 0) {
               return timestampDifference;
@@ -215,7 +219,7 @@ export default function HomeScreen() {
             evidence,
             incident,
             meta: formatEvidenceMeta(evidence, incident),
-            time: formatRecentTime(evidence.created_at),
+            time: formatRecentTime(evidenceTimelineValue(evidence)),
             title: formatEvidenceTitle(typeName, evidence.file_name),
           };
         });
