@@ -98,8 +98,6 @@ export default function CaseScreen() {
 
     try {
       const cases = await getCases();
-    
-      console.log('Retrieved cases:', cases);
 
       if (cases.length === 0) {
         setCaseInfo(null);

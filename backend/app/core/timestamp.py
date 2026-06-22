@@ -1,10 +1,87 @@
-import hashlib
 import base64
-import struct
-import requests
+import hashlib
 from datetime import datetime, timezone
 
+import requests
+from pyasn1.codec.der import decoder
+from pyasn1.type import namedtype, univ, useful
+
 TSA_URL = "http://timestamp.sectigo.com/rfc3161"
+SHA256_OID = "2.16.840.1.101.3.4.2.1"
+CMS_SIGNED_DATA_OID = "1.2.840.113549.1.7.2"
+TST_INFO_OID = "1.2.840.113549.1.9.16.1.4"
+
+
+class TimestampAuthorityError(RuntimeError):
+    """Raised when a trusted timestamp cannot be obtained or parsed."""
+
+
+class AlgorithmIdentifier(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("algorithm", univ.ObjectIdentifier()),
+        namedtype.OptionalNamedType("parameters", univ.Any()),
+    )
+
+
+class MessageImprint(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("hashAlgorithm", AlgorithmIdentifier()),
+        namedtype.NamedType("hashedMessage", univ.OctetString()),
+    )
+
+
+class TSTInfo(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("version", univ.Integer()),
+        namedtype.NamedType("policy", univ.ObjectIdentifier()),
+        namedtype.NamedType("messageImprint", MessageImprint()),
+        namedtype.NamedType("serialNumber", univ.Integer()),
+        namedtype.NamedType("genTime", useful.GeneralizedTime()),
+        namedtype.OptionalNamedType("nonce", univ.Integer()),
+    )
+
+
+class EncapsulatedContentInfo(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("eContentType", univ.ObjectIdentifier()),
+        namedtype.OptionalNamedType("eContent", univ.Any()),
+    )
+
+
+class SignerInfos(univ.SetOf):
+    componentType = univ.Any()
+
+
+class SignedData(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("version", univ.Integer()),
+        namedtype.NamedType(
+            "digestAlgorithms",
+            univ.SetOf(componentType=AlgorithmIdentifier()),
+        ),
+        namedtype.NamedType("encapContentInfo", EncapsulatedContentInfo()),
+        namedtype.NamedType("signerInfos", SignerInfos()),
+    )
+
+
+class ContentInfo(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("contentType", univ.ObjectIdentifier()),
+        namedtype.NamedType("content", univ.Any()),
+    )
+
+
+class PKIStatusInfo(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("status", univ.Integer()),
+    )
+
+
+class TimeStampResp(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("status", PKIStatusInfo()),
+        namedtype.OptionalNamedType("timeStampToken", ContentInfo()),
+    )
 
 def _build_tsq(file_hash: bytes) -> bytes:
     """
@@ -50,8 +127,6 @@ async def request_timestamp(file_bytes: bytes) -> dict:
     try:
         # Hash the file
         file_hash = hashlib.sha256(file_bytes).digest()
-        hash_hex = file_hash.hex()
-
         # Build and send the TSQ
         tsq = _build_tsq(file_hash)
         response = requests.post(
@@ -62,33 +137,83 @@ async def request_timestamp(file_bytes: bytes) -> dict:
         )
 
         if response.status_code != 200:
-            raise ValueError(f"TSA returned HTTP {response.status_code}")
+            raise TimestampAuthorityError(f"TSA returned HTTP {response.status_code}")
 
         tsr_bytes = response.content
         if not tsr_bytes:
-            raise ValueError("TSA returned empty response")
+            raise TimestampAuthorityError("TSA returned empty response")
 
-        # Store the full token as base64 for later verification
-        token_b64 = base64.b64encode(tsr_bytes).decode("utf-8")
+        parsed_response = _parse_timestamp_response(tsr_bytes)
+        token_info = parsed_response["token_info"]
 
         return {
-            "timestamp_token": token_b64,
-            "timestamp_authority": TSA_URL,
-            "timestamp_status": "granted",
-            "timestamp_hash_algorithm": "SHA-256",
-            "timestamp_message_imprint": hash_hex,
-            "timestamp_nonce": None,
-            "timestamp_time": datetime.now(timezone.utc).isoformat(),
+            "authority": TSA_URL,
+            "hash_algorithm": "SHA-256",
+            "message_imprint": token_info["message_imprint"],
+            "nonce": token_info["nonce"],
+            "token_der": base64.b64encode(tsr_bytes).decode("utf-8"),
+            "status": parsed_response["status"],
+            "time": token_info["time"],
         }
 
-    except Exception as e:
-        # Do not fail the upload if timestamping fails — log it and return a failed status
+    except TimestampAuthorityError:
+        raise
+    except Exception as error:
+        raise TimestampAuthorityError(f"Timestamp authority request failed: {error}") from error
+
+
+def _format_generalized_time(value: useful.GeneralizedTime) -> str:
+    raw_value = str(value)
+    parsed_time = datetime.strptime(raw_value, "%Y%m%d%H%M%SZ").replace(tzinfo=timezone.utc)
+    return parsed_time.isoformat().replace("+00:00", "Z")
+
+
+def _parse_timestamp_response(response_der: bytes) -> dict:
+    try:
+        response, rest = decoder.decode(response_der, asn1Spec=TimeStampResp())
+        if rest:
+            raise ValueError("Unexpected trailing data in timestamp response")
+
+        status_code = int(response["status"]["status"])
+        if status_code != 0:
+            raise ValueError(f"TSA did not grant timestamp request: status {status_code}")
+
+        token = response["timeStampToken"]
+        signed_data, rest = decoder.decode(token["content"], asn1Spec=SignedData())
+        if rest:
+            raise ValueError("Unexpected trailing data in signed timestamp token")
+
+        encap_content = signed_data["encapContentInfo"]
+        if str(encap_content["eContentType"]) != TST_INFO_OID:
+            raise ValueError("Timestamp token does not contain TSTInfo")
+
+        tst_info, rest = decoder.decode(encap_content["eContent"], asn1Spec=TSTInfo())
+        if rest:
+            raise ValueError("Unexpected trailing data in TSTInfo")
+
+        imprint = tst_info["messageImprint"]
+        hash_algorithm = str(imprint["hashAlgorithm"]["algorithm"])
+        if hash_algorithm != SHA256_OID:
+            raise ValueError(f"Unsupported timestamp hash algorithm: {hash_algorithm}")
+
+        nonce = tst_info["nonce"]
+
         return {
-            "timestamp_token": None,
-            "timestamp_authority": TSA_URL,
-            "timestamp_status": f"failed: {str(e)}",
-            "timestamp_hash_algorithm": "SHA-256",
-            "timestamp_message_imprint": None,
-            "timestamp_nonce": None,
-            "timestamp_time": datetime.now(timezone.utc).isoformat(),
+            "status": "granted",
+            "token_info": {
+                "time": _format_generalized_time(tst_info["genTime"]),
+                "message_imprint": bytes(imprint["hashedMessage"]).hex(),
+                "nonce": str(int(nonce)) if nonce.hasValue() else None,
+            },
         }
+    except Exception as error:
+        if isinstance(error, TimestampAuthorityError):
+            raise
+        raise TimestampAuthorityError(f"Unable to parse timestamp response: {error}") from error
+
+
+def extract_timestamp_info_from_token_der(token_der: str) -> dict:
+    try:
+        return _parse_timestamp_response(base64.b64decode(token_der))["token_info"]
+    except Exception as error:
+        raise ValueError(f"Unable to extract timestamp info: {error}") from error

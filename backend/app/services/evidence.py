@@ -33,9 +33,6 @@ async def upload_evidence(
     # Step 2: Encrypt the file
     encryption_data = await encryption_service.encrypt_file(user_id, incident_id, file_bytes)
 
-    # Step 2: Get RFC 3161 timestamp over the original unencrypted file bytes
-    ts_data = await timestamp_client.request_timestamp(file_bytes)
-
     # Step 3: Save metadata to database
     evidence = await metadata_repository.save_evidence_metadata(
         db,
@@ -47,18 +44,7 @@ async def upload_evidence(
         data
     )
 
-    # Step 4: Write timestamp data back to the evidence record
-    evidence.timestamp_token = ts_data.get("timestamp_token")
-    evidence.timestamp_authority = ts_data.get("timestamp_authority")
-    evidence.timestamp_status = ts_data.get("timestamp_status")
-    evidence.timestamp_hash_algorithm = ts_data.get("timestamp_hash_algorithm")
-    evidence.timestamp_message_imprint = ts_data.get("timestamp_message_imprint")
-    evidence.timestamp_nonce = ts_data.get("timestamp_nonce")
-    evidence.timestamp_time = ts_data.get("timestamp_time")
-    await db.commit()
-    await db.refresh(evidence)
-
-    # Step 5: Write audit log
+    # Step 4: Write audit log
     await audit_logger.log_action(
         db,
         user_id=user_id,
