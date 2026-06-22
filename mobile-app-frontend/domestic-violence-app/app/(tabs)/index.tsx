@@ -336,7 +336,11 @@ export default function HomeScreen() {
               <Text style={styles.safetyText}>{`${getFormattedDate()} · You are safe right now`}</Text>
             </View>
 
-            <Pressable accessibilityRole="button" style={styles.recordCard}>
+            <Pressable
+              accessibilityLabel="Open voice note capture"
+              accessibilityRole="button"
+              onPress={() => router.push('/voice-note' as Href)}
+              style={styles.recordCard}>
               <View style={styles.recordIcon}>
                 <Ionicons name="add" size={28} color="#FFFFFF" />
               </View>
