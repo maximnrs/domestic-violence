@@ -7,16 +7,20 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  createIncident,
   getCases,
   listIncidents,
   type CaseResponse,
   type IncidentResponse,
+  type IncidentType,
 } from '@/services/api';
+import { incidentTypes, normalizeOptional, normalizeTime, todayIsoDate } from '@/utils/incidents';
 
 function formatIncidentType(type: IncidentResponse['incident_type']) {
   if (!type) {
@@ -76,6 +80,13 @@ export default function CaseScreen() {
   const [incidentError, setIncidentError] = useState<string | null>(null);
   const [isCaseLoading, setIsCaseLoading] = useState(true);
   const [isIncidentLoading, setIsIncidentLoading] = useState(false);
+  const [isCreatingIncident, setIsCreatingIncident] = useState(false);
+  const [showCreateIncident, setShowCreateIncident] = useState(false);
+  const [newIncidentDate, setNewIncidentDate] = useState(todayIsoDate);
+  const [newIncidentTime, setNewIncidentTime] = useState('');
+  const [newIncidentLocation, setNewIncidentLocation] = useState('');
+  const [newIncidentDescription, setNewIncidentDescription] = useState('');
+  const [newIncidentType, setNewIncidentType] = useState<IncidentType>('other');
 
   const loadCaseAndIncidents = useCallback(async () => {
     setIsCaseLoading(true);
@@ -148,6 +159,49 @@ export default function CaseScreen() {
     router.push(`/incidents/${incident.incident_id}` as Href);
   }
 
+  function toggleCreateIncident() {
+    setShowCreateIncident((current) => !current);
+    setIncidentError(null);
+  }
+
+  async function handleCreateIncident() {
+    if (!caseInfo) {
+      setIncidentError('Your case must load before an incident can be created.');
+      return;
+    }
+
+    if (newIncidentDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(newIncidentDate.trim())) {
+      setIncidentError('Use YYYY-MM-DD for incident date.');
+      return;
+    }
+
+    setIncidentError(null);
+
+    try {
+      setIsCreatingIncident(true);
+      const createdIncident = await createIncident({
+        case_id: caseInfo.case_id,
+        incident_date: normalizeOptional(newIncidentDate),
+        incident_time: normalizeTime(newIncidentTime),
+        location: normalizeOptional(newIncidentLocation),
+        incident_type: newIncidentType,
+        description: normalizeOptional(newIncidentDescription),
+      });
+
+      setIncidents((current) => [createdIncident, ...current]);
+      setShowCreateIncident(false);
+      setNewIncidentDate(todayIsoDate());
+      setNewIncidentTime('');
+      setNewIncidentLocation('');
+      setNewIncidentDescription('');
+      setNewIncidentType('other');
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : 'Unable to create incident.');
+    } finally {
+      setIsCreatingIncident(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -200,10 +254,102 @@ export default function CaseScreen() {
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>INCIDENTS</Text>
-              <Pressable accessibilityRole="button" onPress={reloadIncidents}>
-                <Ionicons name="refresh" size={19} color="#79908E" />
-              </Pressable>
+              <View style={styles.sectionActions}>
+                <Pressable
+                  accessibilityLabel="Refresh incidents"
+                  accessibilityRole="button"
+                  onPress={reloadIncidents}
+                  style={styles.iconButton}>
+                  <Ionicons name="refresh" size={19} color="#79908E" />
+                </Pressable>
+              </View>
             </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={toggleCreateIncident}
+              style={styles.newIncidentToggle}>
+              <Ionicons
+                name={showCreateIncident ? 'remove-circle-outline' : 'add-circle-outline'}
+                size={19}
+                color="#1F5857"
+              />
+              <Text style={styles.newIncidentToggleText}>
+                {showCreateIncident ? 'Hide new incident' : 'Create new incident'}
+              </Text>
+            </Pressable>
+
+            {showCreateIncident ? (
+              <View style={styles.createCard}>
+                <Text style={styles.createTitle}>New incident</Text>
+                <Text style={styles.inputLabel}>Date</Text>
+                <TextInput
+                  onChangeText={setNewIncidentDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#9BA6A4"
+                  style={styles.input}
+                  value={newIncidentDate}
+                />
+                <Text style={styles.inputLabel}>Time</Text>
+                <TextInput
+                  onChangeText={setNewIncidentTime}
+                  placeholder="HH:mm"
+                  placeholderTextColor="#9BA6A4"
+                  style={styles.input}
+                  value={newIncidentTime}
+                />
+                <Text style={styles.inputLabel}>Type</Text>
+                <View style={styles.typeGrid}>
+                  {incidentTypes.map((type) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={type}
+                      onPress={() => setNewIncidentType(type)}
+                      style={[
+                        styles.typeChip,
+                        newIncidentType === type ? styles.typeChipSelected : null,
+                      ]}>
+                      <Text
+                        style={[
+                          styles.typeChipText,
+                          newIncidentType === type ? styles.typeChipTextSelected : null,
+                        ]}>
+                        {type}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={styles.inputLabel}>Location</Text>
+                <TextInput
+                  onChangeText={setNewIncidentLocation}
+                  placeholder="Optional"
+                  placeholderTextColor="#9BA6A4"
+                  style={styles.input}
+                  value={newIncidentLocation}
+                />
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput
+                  multiline
+                  onChangeText={setNewIncidentDescription}
+                  placeholder="Optional"
+                  placeholderTextColor="#9BA6A4"
+                  style={[styles.input, styles.descriptionInput]}
+                  textAlignVertical="top"
+                  value={newIncidentDescription}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={isCreatingIncident}
+                  onPress={handleCreateIncident}
+                  style={[styles.primaryButton, isCreatingIncident ? styles.buttonDisabled : null]}>
+                  {isCreatingIncident ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Create incident</Text>
+                  )}
+                </Pressable>
+              </View>
+            ) : null}
 
             {isIncidentLoading ? (
               <View style={styles.inlineLoading}>
@@ -390,11 +536,112 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 26,
   },
+  sectionActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
   sectionTitle: {
     color: '#A7ADAF',
     fontFamily: 'Manrope_800ExtraBold',
     fontSize: 12,
     letterSpacing: 1,
+  },
+  newIncidentToggle: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  newIncidentToggleText: {
+    color: '#1F5857',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 13,
+  },
+  createCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E7ECEA',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 10,
+    padding: 16,
+  },
+  createTitle: {
+    color: '#102120',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 18,
+  },
+  inputLabel: {
+    color: '#8D9998',
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    marginTop: 14,
+  },
+  input: {
+    backgroundColor: '#F8FAF9',
+    borderColor: '#E0E7E5',
+    borderRadius: 12,
+    borderWidth: 1,
+    color: '#102120',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
+    marginTop: 7,
+    minHeight: 46,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  descriptionInput: {
+    minHeight: 86,
+  },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  typeChip: {
+    backgroundColor: '#F8FAF9',
+    borderColor: '#E0E7E5',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  typeChipSelected: {
+    backgroundColor: '#1F5857',
+    borderColor: '#1F5857',
+  },
+  typeChipText: {
+    color: '#52615F',
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+  },
+  typeChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#1F5857',
+    borderRadius: 14,
+    justifyContent: 'center',
+    marginTop: 18,
+    minHeight: 48,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 14,
+  },
+  buttonDisabled: {
+    opacity: 0.64,
   },
   incidentList: {
     gap: 12,
