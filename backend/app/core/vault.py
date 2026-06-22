@@ -90,3 +90,39 @@ async def delete_key(user_id: int, incident_id: int, file_id: str):
         )
     except Exception as e:
         raise ValueError(f"Failed to delete key from OpenBao: {str(e)}")
+
+class VaultKeyStore:
+    async def store_key(self, user_id: int, incident_id: int, file_id: str, key_bytes: bytes) -> str:
+        key_path = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
+        try:
+            client.secrets.kv.v2.create_or_update_secret(
+                path=key_path,
+                secret={"aes_key": base64.b64encode(key_bytes).decode('utf-8')},
+                mount_point="Domestic"
+            )
+            return key_path
+        except Exception as e:
+            raise ValueError(f"Failed to store key in OpenBao: {str(e)}")
+
+    async def retrieve_key_by_reference(self, key_reference: str) -> bytes:
+        return await retrieve_key_by_reference(key_reference)
+
+class VaultKeyStore:
+    async def store_key(self, user_id: int, incident_id: int, file_id: str, key_bytes: bytes) -> str:
+        import os
+        key_path = f"evidence/user_{user_id}/incident_{incident_id}/{file_id}"
+        try:
+            client.secrets.kv.v2.create_or_update_secret(
+                path=key_path,
+                secret={
+                    "aes_key": base64.b64encode(key_bytes).decode('utf-8'),
+                    "hmac_key": base64.b64encode(os.urandom(32)).decode('utf-8'),
+                },
+                mount_point="Domestic"
+            )
+            return key_path
+        except Exception as e:
+            raise ValueError(f"Failed to store key in OpenBao: {str(e)}")
+
+    async def retrieve_key_by_reference(self, key_reference: str) -> bytes:
+        return await retrieve_key_by_reference(key_reference)
