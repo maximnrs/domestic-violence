@@ -82,6 +82,13 @@ export type EvidenceResponse = {
   file_hash: string;
   created_at: string;
   description: string | null;
+  timestamp_token?: string | null;
+  timestamp_authority?: string | null;
+  timestamp_status?: string | null;
+  timestamp_hash_algorithm?: string | null;
+  timestamp_message_imprint?: string | null;
+  timestamp_nonce?: string | null;
+  timestamp_time?: string | null;
 };
 
 export type EvidenceTypeResponse = {
@@ -186,8 +193,13 @@ export function getCase(caseId: number) {
   return apiRequest<CaseResponse>(`/cases/${caseId}`);
 }
 
-export function listIncidents(caseId: number) {
-  return apiRequest<IncidentResponse[]>(`/incidents/admin/?case_id=${caseId}`);
+export function getAllIncidents() {
+  return apiRequest<IncidentResponse[]>("/incidents/admin/");
+}
+
+export async function listIncidents(caseId: number) {
+  const incidents = await getAllIncidents();
+  return incidents.filter((incident) => incident.case_id === caseId);
 }
 
 export function getIncident(incidentId: number) {
@@ -205,8 +217,13 @@ export function getEvidenceTypes() {
   return apiRequest<EvidenceTypeResponse[]>("/evidence-types/");
 }
 
-export function listIncidentEvidence(incidentId: number) {
-  return apiRequest<EvidenceResponse[]>(`/evidence/admin/?incident_id=${incidentId}`);
+export function getAllEvidence() {
+  return apiRequest<EvidenceResponse[]>("/evidence/admin/");
+}
+
+export async function listIncidentEvidence(incidentId: number) {
+  const evidence = await getAllEvidence();
+  return evidence.filter((item) => item.incident_id === incidentId);
 }
 
 export async function listCaseEvidence(caseId: number) {

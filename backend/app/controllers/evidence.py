@@ -77,12 +77,11 @@ async def upload_evidence(
     response_model=list[EvidenceResponse],
 )
 async def get_admin_incident_evidence(
-    incident_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     from app.services import metadata
-    return await metadata.get_incident_evidence_for_admin(db, incident_id)
+    return await metadata.get_all_evidence_for_admin(db)
 
 @router.get(
     "/{evidence_id}",

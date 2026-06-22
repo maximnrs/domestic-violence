@@ -72,15 +72,15 @@ def test_get_incidents_passes_authenticated_user_and_case_id(monkeypatch):
     assert user_id == 20
     assert case_id == 10
 
-def test_get_admin_incidents_uses_case_id_without_ownership_filter(monkeypatch):
-    get_incidents_for_case = AsyncMock(return_value=[make_incident(case_id=10)])
+def test_get_admin_incidents_returns_all_incidents(monkeypatch):
+    get_all_incidents = AsyncMock(return_value=[make_incident(case_id=10), make_incident(incident_id=31, case_id=11)])
     monkeypatch.setattr(
         incident_controller.incident_service,
-        "get_incidents_for_case",
-        get_incidents_for_case,
+        "get_all_incidents",
+        get_all_incidents,
     )
 
-    response = make_client().get("/incidents/admin/?case_id=10")
+    response = make_client().get("/incidents/admin/")
 
     assert response.status_code == 200
     assert response.json() == [
@@ -93,11 +93,19 @@ def test_get_admin_incidents_uses_case_id_without_ownership_filter(monkeypatch):
             "incident_type": "other",
             "description": "Test incident",
             "creation_date": "2026-01-03",
-        }
+        },
+        {
+            "incident_id": 31,
+            "case_id": 11,
+            "incident_date": "2026-01-02",
+            "incident_time": None,
+            "location": "Amsterdam",
+            "incident_type": "other",
+            "description": "Test incident",
+            "creation_date": "2026-01-03",
+        },
     ]
-    get_incidents_for_case.assert_awaited_once()
-    _, case_id = get_incidents_for_case.await_args.args
-    assert case_id == 10
+    get_all_incidents.assert_awaited_once()
 
 
 @pytest.mark.anyio

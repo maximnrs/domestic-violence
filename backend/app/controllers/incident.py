@@ -32,11 +32,10 @@ async def get_incidents(
 
 @router.get("/admin/", response_model=list[IncidentResponse])
 async def get_admin_incidents(
-    case_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return await incident_service.get_incidents_for_case(db, case_id)
+    return await incident_service.get_all_incidents(db)
 
 @router.get("/{incident_id}", response_model=IncidentResponse)
 async def get_incident(

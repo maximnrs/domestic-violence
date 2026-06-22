@@ -198,7 +198,7 @@ def test_user_can_upload_to_authorized_incident(monkeypatch):
     assert upload_file.read_called is True
     upload_mock.assert_awaited_once()
 
-def test_get_admin_incident_evidence_uses_incident_id_without_ownership_filter(monkeypatch):
+def test_get_admin_evidence_returns_all_evidence(monkeypatch):
     app = FastAPI()
     app.include_router(evidence_controller.router)
 
@@ -210,7 +210,7 @@ def test_get_admin_incident_evidence_uses_incident_id_without_ownership_filter(m
         user_id=20
     )
 
-    get_incident_evidence_for_admin = AsyncMock(
+    get_all_evidence_for_admin = AsyncMock(
         return_value=[
             SimpleNamespace(
                 evidence_id=40,
@@ -231,11 +231,11 @@ def test_get_admin_incident_evidence_uses_incident_id_without_ownership_filter(m
     )
     monkeypatch.setattr(
         metadata_service,
-        "get_incident_evidence_for_admin",
-        get_incident_evidence_for_admin,
+        "get_all_evidence_for_admin",
+        get_all_evidence_for_admin,
     )
 
-    response = TestClient(app).get("/evidence/admin/?incident_id=30")
+    response = TestClient(app).get("/evidence/admin/")
 
     assert response.status_code == 200
     assert response.json() == [
@@ -255,9 +255,7 @@ def test_get_admin_incident_evidence_uses_incident_id_without_ownership_filter(m
             "description": None,
         }
     ]
-    get_incident_evidence_for_admin.assert_awaited_once()
-    _, incident_id = get_incident_evidence_for_admin.await_args.args
-    assert incident_id == 30
+    get_all_evidence_for_admin.assert_awaited_once()
 
 
 @pytest.mark.skipif(

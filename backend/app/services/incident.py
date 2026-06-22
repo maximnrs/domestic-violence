@@ -41,6 +41,10 @@ async def get_incidents_for_case(db: AsyncSession, case_id: int) -> list[Inciden
     )
     return result.scalars().all()
 
+async def get_all_incidents(db: AsyncSession) -> list[Incident]:
+    result = await db.execute(select(Incident).order_by(Incident.incident_id))
+    return result.scalars().all()
+
 async def get_incident(db: AsyncSession, user_id: int, incident_id: int) -> Incident:
     result = await db.execute(
         select(Incident).where(Incident.incident_id == incident_id)

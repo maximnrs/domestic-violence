@@ -20,20 +20,21 @@ export async function getCaseById(caseId: string): Promise<LegalCase | undefined
 }
 
 export async function listIncidents(caseId: string): Promise<Incident[]> {
-  const [incidents, evidenceTypes] = await Promise.all([
-    api.listIncidents(parseCaseId(caseId)),
+  const numericCaseId = parseCaseId(caseId);
+  const [incidents, allEvidence, evidenceTypes] = await Promise.all([
+    api.getAllIncidents(),
+    api.getAllEvidence(),
     api.getEvidenceTypes().catch(() => []),
   ]);
   const evidenceTypeLookup = buildEvidenceTypeLookup(evidenceTypes);
+  const incidentResponses = incidents.filter((incident) => incident.case_id === numericCaseId);
 
-  return Promise.all(
-    incidents.map(async (incident) => {
-      const evidence = await api.listIncidentEvidence(incident.incident_id);
-
-      return mapIncidentResponse(
-        incident,
-        evidence.map((item) => mapEvidenceResponse(item, evidenceTypeLookup))
-      );
-    })
+  return incidentResponses.map((incident) =>
+    mapIncidentResponse(
+      incident,
+      allEvidence
+        .filter((item) => item.incident_id === incident.incident_id)
+        .map((item) => mapEvidenceResponse(item, evidenceTypeLookup))
+    )
   );
 }
