@@ -123,3 +123,12 @@ async def get_evidence_types(
 ):
     result = await db.execute(select(EvidenceType))
     return result.scalars().all()
+
+
+
+@router.get("/admin/evidence/")
+async def get_all_evidence(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await evidence_service.get_all_evidence(db)

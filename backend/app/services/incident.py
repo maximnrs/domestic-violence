@@ -60,3 +60,8 @@ async def update_incident(db: AsyncSession, user_id: int, incident_id: int, data
     await db.commit()
     await db.refresh(incident)
     return incident
+
+
+async def get_all_incidents(db: AsyncSession) -> list[Incident]:
+    result = await db.execute(select(Incident))
+    return result.scalars().all()
