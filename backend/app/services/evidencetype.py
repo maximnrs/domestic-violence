@@ -5,10 +5,12 @@ from app.models.evidencetype import EvidenceType
 
 WRITTEN_NOTE_TYPE_NAME = "written_note"
 VOICE_AUDIO_TYPE_NAME = "audio"
+VIDEO_AUDIO_TYPE_NAME = "video"
 
 DEFAULT_EVIDENCE_TYPES = (
     (WRITTEN_NOTE_TYPE_NAME, "Written text note"),
     (VOICE_AUDIO_TYPE_NAME, "Voice or audio recording"),
+    (VIDEO_AUDIO_TYPE_NAME, "Photo or video recording"),
 )
 
 
