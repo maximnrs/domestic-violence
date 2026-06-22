@@ -1,5 +1,5 @@
 import type { TranscriptionStatus } from "../types/legalDashboard";
-import { transcribeEvidence, transcribeDemo } from "./api";
+import { downloadEvidence, transcribeEvidence, transcribeDemo } from "./api";
 
 export type DemoTranscriptionRequest = {
   file: File;
@@ -66,13 +66,46 @@ export async function transcribeReportAudioForDemo({
 
 export async function requestReportAudioTranscription({
   evidenceId,
+  fileName,
 }: {
   evidenceId: string;
+  fileName?: string;
 }): Promise<TranscriptionResult> {
-  // Sends the evidence ID to the backend, which downloads and decrypts
-  // the audio from MinIO and sends it to the Whisper service.
-  const result = await transcribeEvidence(parseInt(evidenceId, 10));
+  const whisperUrl = import.meta.env.VITE_WHISPER_URL;
 
+  // If the Whisper URL is configured, download the audio from the existing
+  // evidence endpoint and send it directly to the Whisper service.
+  // This works without needing the new FastAPI transcription endpoints deployed.
+  if (whisperUrl) {
+    const download = await downloadEvidence(parseInt(evidenceId, 10));
+
+    // Convert the hex-encoded bytes from the API back into a binary Blob
+    const hex = download.data;
+    const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+    const blob = new Blob([bytes], { type: "audio/mp4" });
+    const audioFile = new File([blob], fileName ?? `evidence-${evidenceId}.m4a`, { type: "audio/mp4" });
+
+    const formData = new FormData();
+    formData.append("file", audioFile);
+
+    const response = await fetch(whisperUrl, { method: "POST", body: formData });
+    if (!response.ok) throw new Error("Whisper service error");
+
+    const result = await response.json() as { text: string; language: string; language_probability: number; segments?: TranscriptionSegment[] };
+    return {
+      id: `transcript-${evidenceId}-${Date.now()}`,
+      fileName: audioFile.name,
+      status: "completed",
+      text: result.text,
+      segments: result.segments,
+      requestedAt: new Date().toISOString(),
+      language: result.language,
+      languageProbability: result.language_probability,
+    };
+  }
+
+  // Fall back to the FastAPI transcription endpoint if no direct Whisper URL is set
+  const result = await transcribeEvidence(parseInt(evidenceId, 10));
   return {
     id: `transcript-${result.evidence_id}-${Date.now()}`,
     fileName: `evidence-${result.evidence_id}`,

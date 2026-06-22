@@ -79,12 +79,12 @@ export function TranscriptionStepPlaceholder({
 
   // Sends a selected evidence item to the backend, which downloads the audio
   // from the database and sends it to the Whisper service for transcription.
-  async function handleTranscribeEvidence(evidenceId: string) {
+  async function handleTranscribeEvidence(evidenceId: string, fileName?: string) {
     setTranscribing((prev) => ({ ...prev, [evidenceId]: true }));
     setErrors((prev) => ({ ...prev, [evidenceId]: "" }));
 
     try {
-      const result = await requestReportAudioTranscription({ evidenceId });
+      const result = await requestReportAudioTranscription({ evidenceId, fileName });
       setTranscripts((prev) => ({ ...prev, [evidenceId]: result }));
     } catch (err) {
       setErrors((prev) => ({
@@ -169,7 +169,7 @@ export function TranscriptionStepPlaceholder({
                     />
                     <Button
                       type="button"
-                      onClick={() => handleTranscribeEvidence(item.id)}
+                      onClick={() => handleTranscribeEvidence(item.id, item.filename)}
                       disabled={transcribing[item.id] || !!transcripts[item.id]}
                     >
                       {transcribing[item.id]
