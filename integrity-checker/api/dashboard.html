@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Integrity Monitor — Nura</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f4f8;
+    color: #1a202c;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: #1e293b;
+    color: #fff;
+    padding: 0 2rem;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header .title { display: flex; align-items: center; gap: .75rem; }
+  header h1 { font-size: 1.1rem; font-weight: 600; }
+  header .subtitle { font-size: .75rem; color: #64748b; }
+  #last-refresh { font-size: .75rem; color: #94a3b8; }
+
+  /* ── Layout ── */
+  main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* ── Banner ── */
+  .banner {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: .85rem 1.2rem;
+    margin-bottom: 1.5rem;
+    font-size: .82rem;
+    color: #78350f;
+    display: none;
+  }
+  .banner.show { display: block; }
+  .banner strong { font-weight: 600; }
+
+  /* ── Stat cards ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    text-align: center;
+    cursor: default;
+  }
+  .stat .number { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+  .stat .label  { font-size: .75rem; color: #64748b; margin-top: .4rem; text-transform: uppercase; letter-spacing: .5px; }
+  .stat.total        .number { color: #3b82f6; }
+  .stat.verified     .number { color: #22c55e; }
+  .stat.tampered     .number { color: #ef4444; }
+  .stat.unverifiable .number { color: #94a3b8; }
+
+  /* ── Cards ── */
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    margin-bottom: 2rem;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-header h2 { font-size: 1rem; font-weight: 600; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  th { padding: .7rem 1rem; text-align: left; font-size: .72rem; text-transform: uppercase;
+       letter-spacing: .5px; color: #64748b; border-bottom: 1px solid #e2e8f0;
+       background: #f8fafc; white-space: nowrap; }
+  td { padding: .8rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+
+  .filename { font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mono     { font-family: monospace; font-size: .75rem; color: #64748b; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-block; padding: .2rem .65rem; border-radius: 9999px;
+    font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+    white-space: nowrap;
+  }
+  .badge.verified     { background: #dcfce7; color: #166534; }
+  .badge.tampered     { background: #fee2e2; color: #991b1b; }
+  .badge.unverifiable { background: #f1f5f9; color: #475569; }
+  .badge.error        { background: #fef3c7; color: #92400e; }
+  .badge.null,
+  .badge.pending      { background: #fef9c3; color: #854d0e; }
+
+  /* ── Buttons ── */
+  .btn {
+    border: none; border-radius: 6px; padding: .35rem .8rem;
+    font-size: .78rem; cursor: pointer; font-weight: 500; transition: opacity .15s;
+  }
+  .btn:hover:not(:disabled) { opacity: .82; }
+  .btn-check   { background: #3b82f6; color: #fff; }
+  .btn-refresh { background: #f1f5f9; color: #475569; }
+  .btn:disabled { background: #e2e8f0; color: #94a3b8; cursor: default; }
+
+  /* ── Empty ── */
+  .empty { text-align: center; padding: 3rem 1rem; color: #94a3b8; font-size: .9rem; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem;
+    background: #1e293b; color: #fff;
+    padding: .8rem 1.2rem; border-radius: 8px;
+    font-size: .85rem; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .25s, transform .25s;
+    pointer-events: none; z-index: 999; max-width: 340px;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.tampered { background: #dc2626; }
+  #toast.ok { background: #16a34a; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <div>
+      <h1>Evidence Integrity Monitor</h1>
+      <div class="subtitle">Nura — domestic violence evidence system</div>
+    </div>
+  </div>
+  <span id="last-refresh">Loading…</span>
+</header>
+
+<main>
+
+  <!-- Warning banner for unverifiable files -->
+  <div class="banner" id="fix-banner">
+    <strong>Action required:</strong> Some files show as <em>unverifiable</em> because they were
+    uploaded before the HMAC key fix was applied to the API-Server.
+    Apply <code>api-server-fix/vault.py</code> and re-upload those files to enable full verification.
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat total">
+      <div class="number" id="s-total">—</div>
+      <div class="label">Total Files</div>
+    </div>
+    <div class="stat verified">
+      <div class="number" id="s-verified">—</div>
+      <div class="label">Verified</div>
+    </div>
+    <div class="stat tampered">
+      <div class="number" id="s-tampered">—</div>
+      <div class="label">Tampered</div>
+    </div>
+    <div class="stat unverifiable">
+      <div class="number" id="s-unverifiable">—</div>
+      <div class="label">Unverifiable</div>
+    </div>
+  </div>
+
+  <!-- Evidence files -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Evidence Files</h2>
+      <button class="btn btn-refresh" onclick="loadAll()">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Filename</th>
+            <th>Incident</th>
+            <th>Uploaded</th>
+            <th>Integrity Status</th>
+            <th>Last Checked</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="files-body">
+          <tr><td colspan="7" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Integrity check log -->
+  <div class="card">
+    <div class="card-header"><h2>Integrity Check Log</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Evidence ID</th>
+            <th>Result</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="log-body">
+          <tr><td colspan="4" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+function fmt(iso) {
+  if (!iso) return '—';
+  // Date-only value (e.g. "2026-06-14") — show just the date, no fake 2 AM time
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return new Date(iso + 'T12:00:00Z').toLocaleDateString(undefined, { dateStyle: 'short' });
+  }
+  // Datetime: append Z if no timezone so JS treats it as UTC, not local
+  if (!iso.endsWith('Z') && !iso.includes('+')) iso += 'Z';
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
+}
+
+function badge(status) {
+  const s = (status || 'pending').toLowerCase();
+  return `<span class="badge ${s}">${s}</span>`;
+}
+
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ''; }, 4000);
+}
+
+async function loadAll() {
+  await Promise.all([loadFiles(), loadLogs()]);
+  document.getElementById('last-refresh').textContent =
+    'Last updated: ' + new Date().toLocaleTimeString();
+}
+
+async function loadFiles() {
+  try {
+    const data = await fetch('/evidence').then(r => r.json());
+
+    const verified     = data.filter(f => f.integrity_status === 'verified').length;
+    const tampered     = data.filter(f => f.integrity_status === 'tampered').length;
+    const unverifiable = data.filter(f => f.integrity_status === 'unverifiable').length;
+
+    document.getElementById('s-total').textContent        = data.length;
+    document.getElementById('s-verified').textContent     = verified;
+    document.getElementById('s-tampered').textContent     = tampered;
+    document.getElementById('s-unverifiable').textContent = unverifiable;
+
+    document.getElementById('fix-banner').classList.toggle('show', unverifiable > 0);
+
+    const tbody = document.getElementById('files-body');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No evidence files found in the database.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(f => `
+      <tr>
+        <td>${f.evidence_id}</td>
+        <td class="filename" title="${f.file_name}">${f.file_name}</td>
+        <td class="mono">#${f.incident_id}</td>
+        <td>${fmt(f.created_at)}</td>
+        <td>${badge(f.integrity_status)}</td>
+        <td>${fmt(f.hmac_verified_at)}</td>
+        <td>
+          <button class="btn btn-check" onclick="checkFile(${f.evidence_id}, this)">
+            Check Now
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    document.getElementById('files-body').innerHTML =
+      '<tr><td colspan="7" class="empty">Could not load evidence files.</td></tr>';
+  }
+}
+
+async function loadLogs() {
+  try {
+    const data = await fetch('/integrity-logs').then(r => r.json());
+    const tbody = document.getElementById('log-body');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">No checks have been run yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.slice(0, 100).map(l => `
+      <tr>
+        <td>${fmt(l.checked_at)}</td>
+        <td>${l.evidence_id}</td>
+        <td>${badge(l.result)}</td>
+        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            title="${l.message || ''}">${l.message || '—'}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    document.getElementById('log-body').innerHTML =
+      '<tr><td colspan="4" class="empty">Could not load integrity log.</td></tr>';
+  }
+}
+
+async function checkFile(evidenceId, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    const res  = await fetch(`/evidence/${evidenceId}/check`, { method: 'POST' });
+    const data = await res.json();
+    if (data.result === 'tampered') {
+      toast(`TAMPERING DETECTED — evidence #${evidenceId}`, 'tampered');
+    } else if (data.result === 'unverifiable') {
+      toast(`Evidence #${evidenceId} cannot be verified — HMAC key not in Vault.`);
+    } else {
+      toast(`Evidence #${evidenceId} verified — file is intact.`, 'ok');
+    }
+    await loadAll();
+  } catch(e) {
+    toast('Check failed — see console for details.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Check Now';
+  }
+}
+
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>

@@ -4,10 +4,20 @@ from app.core.database import get_db
 from app.models.schemas import EvidenceCreate, EvidenceResponse
 from app.models.user import User
 from app.services import evidence as evidence_service
+from app.services import evidencetype as evidencetype_service
 from app.services import incident as incident_service
 from app.services.auth import get_current_user
 
 router = APIRouter(prefix="/evidence", tags=["Evidence"])
+
+
+@router.get("/types/")
+async def get_evidence_types(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await evidencetype_service.get_evidence_types(db)
+
 
 @router.post(
     "/",

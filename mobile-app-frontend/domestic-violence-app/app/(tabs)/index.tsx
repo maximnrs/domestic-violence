@@ -1,9 +1,19 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { getCurrentUser } from '../../services/api'; // adjust path if needed
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
+import {
+  getCases,
+  getCurrentUser,
+  getEvidenceTypes,
+  listIncidentEvidence,
+  listIncidents,
+  type EvidenceResponse,
+  type EvidenceTypeResponse,
+  type IncidentResponse,
+} from '@/services/api';
 
 const captureActions = [
   {
@@ -25,31 +35,78 @@ const captureActions = [
     backgroundColor: '#EEF2F2',
   },
 ];
-//todo - add real data and navigation for recent moments
-const recentMoments = [
-  {
-    title: 'Verbal incident documented',
-    meta: 'Voice note · 1 photo',
-    time: 'May 19 · 8:42 PM',
-    color: '#E8B34E',
-  },
-  {
-    title: 'Property damage recorded',
-    meta: '3 photos · written note',
-    time: 'May 17 · 3:15 PM',
-    color: '#D76670',
-  },
-  {
-    title: 'Follow-up note added',
-    meta: 'Written note',
-    time: 'May 15 · 10:08 AM',
-    color: '#75AFA4',
-  },
-];
+const evidenceTypeColors: Record<string, string> = {
+  written_note: '#75AFA4',
+  audio: '#E8B34E',
+  video: '#D76670',
+};
+
+type RecentEvidenceMoment = {
+  color: string;
+  evidence: EvidenceResponse;
+  incident: IncidentResponse;
+  meta: string;
+  time: string;
+  title: string;
+};
+
+function formatEvidenceTitle(typeName: string | undefined, fileName: string) {
+  if (typeName === 'written_note') {
+    return 'Written note';
+  }
+
+  if (typeName === 'audio') {
+    return 'Voice note';
+  }
+
+  if (typeName === 'video') {
+    return fileName.toLowerCase().includes('photo') ? 'Photo evidence' : 'Camera evidence';
+  }
+
+  return fileName || 'Evidence item';
+}
+
+function formatIncidentLabel(incident: IncidentResponse) {
+  if (incident.incident_type) {
+    return `${incident.incident_type.charAt(0).toUpperCase()}${incident.incident_type.slice(1)} incident`;
+  }
+
+  return 'Incident';
+}
+
+function formatEvidenceMeta(evidence: EvidenceResponse, incident: IncidentResponse) {
+  if (evidence.description) {
+    return evidence.description;
+  }
+
+  if (incident.location) {
+    return `${formatIncidentLabel(incident)} - ${incident.location}`;
+  }
+
+  return evidence.file_name || formatIncidentLabel(incident);
+}
+
+function formatRecentTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+  }).format(date);
+}
 
 export default function HomeScreen() {
 
     const [firstName, setFirstName] = useState('');
+    const [recentEvidenceMoments, setRecentEvidenceMoments] = useState<RecentEvidenceMoment[]>([]);
+    const [recentEvidenceError, setRecentEvidenceError] = useState<string | null>(null);
+    const [isRecentEvidenceLoading, setIsRecentEvidenceLoading] = useState(false);
     const [showWelcomeToast, setShowWelcomeToast] = useState(false);
     const { welcomeBack } = useLocalSearchParams<{ welcomeBack?: string }>();
 
@@ -65,6 +122,82 @@ export default function HomeScreen() {
 
     loadUser();
   }, []);
+
+  const loadRecentEvidence = useCallback(async () => {
+    setIsRecentEvidenceLoading(true);
+    setRecentEvidenceError(null);
+
+    try {
+      const [cases, evidenceTypes] = await Promise.all([getCases(), getEvidenceTypes()]);
+      const evidenceTypeNameById = evidenceTypes.reduce<Record<number, string>>(
+        (typesById: Record<number, string>, evidenceType: EvidenceTypeResponse) => {
+          typesById[evidenceType.evidence_type_id] = evidenceType.type_name;
+          return typesById;
+        },
+        {}
+      );
+
+      if (cases.length === 0) {
+        setRecentEvidenceMoments([]);
+        return;
+      }
+
+      const incidentGroups = await Promise.all(
+        cases.map((caseInfo) => listIncidents(caseInfo.case_id))
+      );
+      const incidents = incidentGroups.flat();
+
+      if (incidents.length === 0) {
+        setRecentEvidenceMoments([]);
+        return;
+      }
+
+      const evidenceResults = await Promise.allSettled(
+        incidents.map(async (incident) => {
+          const evidence = await listIncidentEvidence(incident.incident_id);
+          return evidence.map((item) => ({ evidence: item, incident }));
+        })
+      );
+      const fulfilledEvidence = evidenceResults
+        .filter((result): result is PromiseFulfilledResult<{ evidence: EvidenceResponse; incident: IncidentResponse }[]> => result.status === 'fulfilled')
+        .flatMap((result) => result.value);
+
+      if (fulfilledEvidence.length === 0 && evidenceResults.some((result) => result.status === 'rejected')) {
+        throw new Error('Unable to load recent evidence.');
+      }
+
+      const nextMoments = fulfilledEvidence
+        .sort(
+          (first, second) =>
+            new Date(second.evidence.created_at).getTime() -
+            new Date(first.evidence.created_at).getTime()
+        )
+        .slice(0, 3)
+        .map<RecentEvidenceMoment>(({ evidence, incident }) => {
+          const typeName = evidenceTypeNameById[evidence.evidence_type_id];
+
+          return {
+            color: typeName ? evidenceTypeColors[typeName] ?? '#75AFA4' : '#75AFA4',
+            evidence,
+            incident,
+            meta: formatEvidenceMeta(evidence, incident),
+            time: formatRecentTime(evidence.created_at),
+            title: formatEvidenceTitle(typeName, evidence.file_name),
+          };
+        });
+
+      setRecentEvidenceMoments(nextMoments);
+    } catch (error) {
+      setRecentEvidenceMoments([]);
+      setRecentEvidenceError(error instanceof Error ? error.message : 'Unable to load recent evidence.');
+    } finally {
+      setIsRecentEvidenceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecentEvidence();
+  }, [loadRecentEvidence]);
 
   useEffect(() => {
     if (welcomeBack !== '1') {
@@ -86,6 +219,10 @@ export default function HomeScreen() {
 
     if (title === 'Written\nNote') {
       router.push('/written-note' as Href);
+    }
+    
+    if (title === "Photo\n& Video") {
+      router.push("/camera-evidence" as Href);
     }
   }
 
@@ -109,6 +246,14 @@ export default function HomeScreen() {
 
   function openBloomDisguise() {
     router.push('/bloom' as Href);
+  }
+
+  function openRecentMoment(moment: RecentEvidenceMoment) {
+    router.push(`/incidents/${moment.incident.incident_id}` as Href);
+  }
+
+  function openCaseOverview() {
+    router.push('/case' as Href);
   }
 
   return (
@@ -191,14 +336,46 @@ export default function HomeScreen() {
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>RECENT MOMENTS</Text>
-            <Pressable accessibilityRole="button">
+            <Pressable accessibilityRole="button" onPress={openCaseOverview}>
               <Text style={styles.seeAllText}>See all</Text>
             </Pressable>
           </View>
 
           <View style={styles.momentList}>
-            {recentMoments.map((moment) => (
-              <Pressable accessibilityRole="button" key={moment.title} style={styles.momentCard}>
+            {isRecentEvidenceLoading ? (
+              <View style={styles.inlineLoading}>
+                <ActivityIndicator color="#1F5857" />
+                <Text style={styles.loadingText}>Loading recent evidence...</Text>
+              </View>
+            ) : null}
+
+            {!isRecentEvidenceLoading && recentEvidenceError ? (
+              <View style={styles.statusPanel}>
+                <Text style={styles.statusTitle}>Recent evidence unavailable</Text>
+                <Text style={styles.statusMessage}>{recentEvidenceError}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={loadRecentEvidence}
+                  style={styles.retryButton}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {!isRecentEvidenceLoading && !recentEvidenceError && recentEvidenceMoments.length === 0 ? (
+              <View style={styles.statusPanel}>
+                <Text style={styles.statusTitle}>No evidence yet</Text>
+                <Text style={styles.statusMessage}>Captured evidence will appear here.</Text>
+              </View>
+            ) : null}
+
+            {!isRecentEvidenceLoading && !recentEvidenceError
+              ? recentEvidenceMoments.map((moment) => (
+              <Pressable
+                accessibilityRole="button"
+                key={moment.evidence.evidence_id}
+                onPress={() => openRecentMoment(moment)}
+                style={styles.momentCard}>
                 <View style={[styles.momentDot, { backgroundColor: moment.color }]} />
                 <View style={styles.momentText}>
                   <Text style={styles.momentTime}>{moment.time}</Text>
@@ -207,7 +384,8 @@ export default function HomeScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#CAD3D1" />
               </Pressable>
-            ))}
+                ))
+              : null}
           </View>
         </View>
       </ScrollView>
@@ -427,6 +605,54 @@ const styles = StyleSheet.create({
   momentList: {
     gap: 12,
     marginTop: 12,
+  },
+  inlineLoading: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E7ECEA',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 72,
+    paddingHorizontal: 16,
+  },
+  loadingText: {
+    color: '#71807E',
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 13,
+  },
+  statusPanel: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E7ECEA',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
+  },
+  statusTitle: {
+    color: '#071314',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 15,
+  },
+  statusMessage: {
+    color: '#71807E',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 5,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EAF3F1',
+    borderRadius: 12,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  retryButtonText: {
+    color: '#1F5857',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 12,
   },
   momentCard: {
     alignItems: 'flex-start',
