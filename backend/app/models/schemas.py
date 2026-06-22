@@ -124,5 +124,13 @@ class EvidenceResponse(BaseModel):
     created_at: datetime
     description: str | None
 
+    timestamp_token: str | None = None
+    timestamp_authority: str | None = None
+    timestamp_status: str | None = None
+    timestamp_hash_algorithm: str | None = None
+    timestamp_message_imprint: str | None = None
+    timestamp_nonce: str | None = None
+    timestamp_time: str | None = None
+
     class Config:
         from_attributes = True
