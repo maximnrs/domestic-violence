@@ -86,3 +86,11 @@ async def update_case(
         return await case_service.update_case(db, current_user.user_id, case_id, data)
     except case_service.CaseNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/admin/")
+async def get_all_cases(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await case_service.get_all_cases(db, current_user.user_id)

@@ -60,3 +60,7 @@ async def update_case(db: AsyncSession, user_id: int, case_id: int, data: CaseUp
     await db.commit()
     await db.refresh(case)
     return case
+
+async def get_all_cases(db: AsyncSession, user_id: int) -> list[Case]:
+    result = await db.execute(select(Case))
+    return result.scalars().all()
