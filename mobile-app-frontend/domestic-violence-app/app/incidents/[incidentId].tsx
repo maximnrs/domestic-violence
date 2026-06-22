@@ -41,6 +41,31 @@ function formatDateTime(date: string | null, time?: string | null) {
   return time ? `${date} · ${time.slice(0, 5)}` : date;
 }
 
+function formatReadableTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  const numericValue = Number(trimmedValue);
+  const date =
+    /^\d{10}$/.test(trimmedValue) || /^\d{13}$/.test(trimmedValue)
+      ? new Date(/^\d{10}$/.test(trimmedValue) ? numericValue * 1000 : numericValue)
+      : new Date(trimmedValue.replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
+
+  if (Number.isNaN(date.getTime())) {
+    return trimmedValue;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
 function getEvidenceTitle(typeName: string | undefined, fileName: string) {
   if (typeName === WRITTEN_NOTE_TYPE_NAME) {
     return 'Written note';
@@ -73,22 +98,24 @@ function getEvidenceIconName(typeName: string | undefined): keyof typeof Ionicon
   return 'document-outline';
 }
 
-function formatTrustedTimestamp(item: EvidenceResponse) {
-  if (!item.timestamp_time && !item.timestamp_status) {
+function formatEvidenceType(typeName: string | undefined) {
+  if (!typeName) {
     return null;
   }
 
-  const status = item.timestamp_status ? item.timestamp_status.replace(/_/g, ' ') : null;
+  return typeName
+    .split('_')
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(' ');
+}
 
-  if (item.timestamp_time && status) {
-    return `Trusted timestamp ${item.timestamp_time} (${status})`;
+function formatTrustedTimestamp(item: EvidenceResponse) {
+  if (!item.timestamp_time) {
+    return null;
   }
 
-  if (item.timestamp_time) {
-    return `Trusted timestamp ${item.timestamp_time}`;
-  }
-
-  return `Trusted timestamp ${status}`;
+  return formatReadableTimestamp(item.timestamp_time);
 }
 
 type StatusPanelProps = {
@@ -384,7 +411,7 @@ export default function IncidentDetailScreen() {
               value={formatDateTime(incident.incident_date, incident.incident_time)}
             />
             <MetadataRow label="Location" value={incident.location} />
-            <MetadataRow label="Created" value={incident.creation_date} />
+            <MetadataRow label="Created" value={formatReadableTimestamp(incident.creation_date)} />
             {incident.description ? (
               <Text style={styles.description}>{incident.description}</Text>
             ) : null}
@@ -445,6 +472,7 @@ export default function IncidentDetailScreen() {
               const noteError = noteErrorById[item.evidence_id];
               const evidenceTitle = getEvidenceTitle(typeName, item.file_name);
               const trustedTimestamp = formatTrustedTimestamp(item);
+              const evidenceTypeLabel = formatEvidenceType(typeName);
 
               return (
                 <Pressable
@@ -473,19 +501,13 @@ export default function IncidentDetailScreen() {
                         />
                       ) : null}
                     </View>
-                    {trustedTimestamp ? (
-                      <Text style={styles.trustedTimestampMeta}>{trustedTimestamp}</Text>
-                    ) : (
-                      <Text style={styles.evidenceMeta}>Created {item.created_at}</Text>
-                    )}
-                    {trustedTimestamp && item.timestamp_authority ? (
-                      <Text style={styles.evidenceMeta}>Authority {item.timestamp_authority}</Text>
-                    ) : null}
-                    {trustedTimestamp ? (
-                      <Text style={styles.evidenceMeta}>Database record {item.created_at}</Text>
-                    ) : null}
                     <Text style={styles.evidenceMeta}>
-                      {typeName ? `Type ${typeName}` : `Type ID #${item.evidence_type_id}`}
+                      Created {trustedTimestamp ?? formatReadableTimestamp(item.created_at)}
+                    </Text>
+                    <Text style={styles.evidenceMeta}>
+                      {evidenceTypeLabel
+                        ? `Type ${evidenceTypeLabel}`
+                        : `Type ID #${item.evidence_type_id}`}
                     </Text>
                     {(isWrittenNote || isVoiceNote) && item.file_name ? (
                       <Text style={styles.evidenceMeta}>File {item.file_name}</Text>
@@ -726,13 +748,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope_600SemiBold',
     fontSize: 12,
     marginTop: 4,
-  },
-  trustedTimestampMeta: {
-    color: '#1F5857',
-    fontFamily: 'Manrope_800ExtraBold',
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 5,
   },
   evidenceDescription: {
     color: '#71807E',
