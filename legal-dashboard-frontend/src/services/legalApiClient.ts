@@ -12,6 +12,18 @@ export function getAuthToken() {
   return authToken;
 }
 
+function parseJsonBody(bodyText: string) {
+  if (!bodyText) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(bodyText) as unknown;
+  } catch {
+    return bodyText;
+  }
+}
+
 export async function apiRequest<TResponse>(
   path: string,
   options: RequestInit = {},
@@ -28,13 +40,16 @@ export async function apiRequest<TResponse>(
   });
 
   const bodyText = await response.text();
-  const data = bodyText ? JSON.parse(bodyText) : null;
+  const data = parseJsonBody(bodyText);
 
   if (!response.ok) {
+    const detail = typeof data === "object" && data !== null && "detail" in data ? data.detail : null;
     const message =
-      typeof data?.detail === "string"
-        ? data.detail
-        : "Something went wrong. Please try again.";
+      typeof detail === "string"
+        ? detail
+        : typeof data === "string" && data.trim()
+          ? data
+          : `Request failed with status ${response.status}`;
 
     throw new Error(message);
   }

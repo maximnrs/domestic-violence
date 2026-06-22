@@ -1,4 +1,5 @@
 import type { TranscriptionStatus } from "../types/legalDashboard";
+import { transcribeEvidence, transcribeDemo } from "./api";
 
 export type DemoTranscriptionRequest = {
   file: File;
@@ -6,48 +7,79 @@ export type DemoTranscriptionRequest = {
   evidenceId?: string;
 };
 
+export type TranscriptionSegment = {
+  start: number;
+  end: number;
+  text: string;
+};
+
 export type TranscriptionResult = {
   id: string;
   fileName: string;
   status: TranscriptionStatus;
   text: string;
+  segments?: TranscriptionSegment[];
   requestedAt: string;
+  language?: string;
+  languageProbability?: number;
 };
-
-const DEMO_TRANSCRIPT_TEXT =
-  "Demo transcript: The caller describes a recent incident, references the selected report evidence, and confirms the audio should be included in the legal report package.";
-
-function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
 
 export async function transcribeReportAudioForDemo({
   file,
 }: DemoTranscriptionRequest): Promise<TranscriptionResult> {
-  // TODO junior-dev:
-  // Replace this mock with a backend upload call that runs only during report generation.
-  // The frontend should send FormData to the backend. The backend should hold the OpenAI
-  // API key and call Whisper/transcriptions from there, never directly from the browser.
-  await wait(700);
+  // Call the Whisper service directly from the browser when the URL is configured.
+  // This allows testing without needing the full FastAPI backend running locally.
+  const whisperUrl = import.meta.env.VITE_WHISPER_URL;
 
+  if (whisperUrl) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(whisperUrl, { method: "POST", body: formData });
+    if (!response.ok) throw new Error("Whisper service error");
+
+    const result = await response.json() as { text: string; language: string; language_probability: number; segments?: TranscriptionSegment[] };
+    return {
+      id: `demo-transcript-${Date.now()}`,
+      fileName: file.name,
+      status: "completed",
+      text: result.text,
+      segments: result.segments,
+      requestedAt: new Date().toISOString(),
+      language: result.language,
+      languageProbability: result.language_probability,
+    };
+  }
+
+  // Fall back to the backend demo endpoint when no direct Whisper URL is set
+  const result = await transcribeDemo(file);
   return {
     id: `demo-transcript-${Date.now()}`,
     fileName: file.name,
     status: "completed",
-    text: DEMO_TRANSCRIPT_TEXT,
+    text: result.text,
     requestedAt: new Date().toISOString(),
+    language: result.language,
+    languageProbability: result.language_probability,
   };
 }
 
-export async function requestReportAudioTranscription(
-  request: DemoTranscriptionRequest
-): Promise<TranscriptionResult> {
-  void request;
-  // TODO junior-dev:
-  // Implement the production report-flow transcription request here.
-  // Suggested contract:
-  // POST /report-drafts/:reportDraftId/transcriptions
-  // multipart/form-data: audio file, evidenceId, caseId if needed
-  // response: transcript id, status, text, timestamps, model metadata
-  throw new Error("Report audio transcription is not implemented yet.");
+export async function requestReportAudioTranscription({
+  evidenceId,
+}: {
+  evidenceId: string;
+}): Promise<TranscriptionResult> {
+  // Sends the evidence ID to the backend, which downloads and decrypts
+  // the audio from MinIO and sends it to the Whisper service.
+  const result = await transcribeEvidence(parseInt(evidenceId, 10));
+
+  return {
+    id: `transcript-${result.evidence_id}-${Date.now()}`,
+    fileName: `evidence-${result.evidence_id}`,
+    status: "completed",
+    text: result.text,
+    requestedAt: new Date().toISOString(),
+    language: result.language,
+    languageProbability: result.language_probability,
+  };
 }

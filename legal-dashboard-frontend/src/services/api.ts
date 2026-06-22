@@ -261,3 +261,33 @@ export function uploadEvidence(payload: UploadEvidenceRequest) {
 export function downloadEvidence(evidenceId: number) {
   return apiRequest<EvidenceDownloadResponse>(`/evidence/${evidenceId}/download`);
 }
+
+export type TranscriptionResponse = {
+  text: string;
+  language: string;
+  language_probability: number;
+};
+
+// Sends a stored evidence file (by ID) to the backend, which downloads,
+// decrypts, and transcribes it using the Whisper service.
+export function transcribeEvidence(evidenceId: number) {
+  return apiRequest<TranscriptionResponse & { evidence_id: number }>(
+    "/transcriptions/",
+    {
+      method: "POST",
+      body: JSON.stringify({ evidence_id: evidenceId }),
+    }
+  );
+}
+
+// Sends a directly uploaded audio file to the backend demo transcription endpoint.
+// Does not require a stored evidence record in the database.
+export function transcribeDemo(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest<TranscriptionResponse>(
+    "/transcriptions/demo",
+    { method: "POST", body: formData },
+    { jsonContentType: false }
+  );
+}

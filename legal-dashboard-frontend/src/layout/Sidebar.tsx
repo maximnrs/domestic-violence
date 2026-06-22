@@ -1,17 +1,42 @@
+import type { UserResponse } from "../services/api";
+import { Icon } from "../components/ui/Icon";
+
 type SidebarProps = {
   activePath: string;
+  currentUser: UserResponse | null;
   onNavigate: (path: string) => void;
 };
 
 const navItems = [
-  { label: "Cases", path: "/cases" },
-  { label: "Report Requests", path: "/reports/new" },
-  { label: "Reports", path: "/reports" },
-  { label: "Users", path: "/users" },
-  { label: "Settings", path: "/settings" },
-];
+  { label: "Cases", path: "/cases", icon: "folder" },
+  { label: "Report Requests", path: "/reports/new", icon: "filePlus" },
+  { label: "Reports", path: "/reports", icon: "fileText" },
+  { label: "Users", path: "/users", icon: "users" },
+  { label: "Settings", path: "/settings", icon: "settings" },
+] as const;
 
-export function Sidebar({ activePath, onNavigate }: SidebarProps) {
+function getUserDisplayName(user: UserResponse | null) {
+  if (!user) {
+    return "Loading user";
+  }
+
+  return `${user.first_name} ${user.last_name}`.trim() || user.email;
+}
+
+function getUserInitials(user: UserResponse | null) {
+  if (!user) {
+    return "LA";
+  }
+
+  const initials = [user.first_name, user.last_name]
+    .map((name) => name?.[0])
+    .filter(Boolean)
+    .join("");
+
+  return (initials || user.email.slice(0, 2)).toUpperCase();
+}
+
+export function Sidebar({ activePath, currentUser, onNavigate }: SidebarProps) {
   function isActive(path: string) {
     if (path === "/cases") {
       return activePath === "/cases" || activePath.startsWith("/cases/");
@@ -27,7 +52,9 @@ export function Sidebar({ activePath, onNavigate }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand-lockup">
-        <div className="brand-mark">n</div>
+        <div className="brand-mark">
+          <Icon name="moon" size={22} />
+        </div>
         <div>
           <strong>nura</strong>
           <span>Legal Dashboard</span>
@@ -42,17 +69,17 @@ export function Sidebar({ activePath, onNavigate }: SidebarProps) {
             type="button"
             onClick={() => onNavigate(item.path)}
           >
-            <span className="nav-icon" aria-hidden="true" />
+            <Icon name={item.icon} className="nav-icon" />
             {item.label}
           </button>
         ))}
       </nav>
 
       <div className="sidebar-user">
-        <div className="avatar">LA</div>
+        <div className="avatar">{getUserInitials(currentUser)}</div>
         <div>
-          <strong>Legal Authority</strong>
-          <span>Officer</span>
+          <strong>{getUserDisplayName(currentUser)}</strong>
+          <span>{currentUser?.email ?? "Signing in..."}</span>
         </div>
       </div>
     </aside>

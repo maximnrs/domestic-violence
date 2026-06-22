@@ -1,5 +1,6 @@
 import type { LegalCase } from "../../types/legalDashboard";
 import { Card } from "../ui/Card";
+import { Icon } from "../ui/Icon";
 import { StatusPill } from "../ui/StatusPill";
 
 type CaseSummaryCardProps = {
@@ -14,7 +15,9 @@ export function CaseSummaryCard({ legalCase }: CaseSummaryCardProps) {
 
   return (
     <Card className="case-summary-card">
-      <div className="case-folder" aria-hidden="true" />
+      <div className="case-folder">
+        <Icon name="folder" size={24} />
+      </div>
       <div className="case-summary-main">
         <div className="case-title-line">
           <h2>{legalCase.id}</h2>

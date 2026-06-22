@@ -1,4 +1,5 @@
 import type { LegalCase } from "../../types/legalDashboard";
+import { Icon } from "../ui/Icon";
 import { StatusPill } from "../ui/StatusPill";
 
 type CasesTableProps = {
@@ -30,7 +31,9 @@ export function CasesTable({ cases, onOpenCase }: CasesTableProps) {
               </td>
               <td>{caseRecord.lastIncidentAt}</td>
               <td>{caseRecord.updatedAt}</td>
-              <td className="row-action">{">"}</td>
+              <td className="row-action">
+                <Icon name="chevronRight" size={18} />
+              </td>
             </tr>
           ))}
         </tbody>
