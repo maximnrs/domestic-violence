@@ -79,6 +79,33 @@ def test_get_my_case_returns_authenticated_users_single_case(monkeypatch):
         "status": "open",
     }
 
+def test_get_admin_cases_returns_all_cases(monkeypatch):
+    get_all_cases = AsyncMock(return_value=[make_case(case_id=10), make_case(case_id=11, user_id=21)])
+    monkeypatch.setattr(case_controller.case_service, "get_all_cases", get_all_cases)
+
+    response = make_client().get("/cases/admin/")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "case_id": 10,
+            "user_id": 20,
+            "case_title": "My Case",
+            "description": None,
+            "creation_date": "2026-01-01",
+            "status": "open",
+        },
+        {
+            "case_id": 11,
+            "user_id": 21,
+            "case_title": "My Case",
+            "description": None,
+            "creation_date": "2026-01-01",
+            "status": "open",
+        },
+    ]
+    get_all_cases.assert_awaited_once()
+
 
 def test_create_second_case_returns_conflict(monkeypatch):
     monkeypatch.setattr(

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -23,6 +23,7 @@ import {
 
 const WRITTEN_NOTE_TYPE_NAME = 'written_note';
 const VOICE_AUDIO_TYPE_NAME = 'audio';
+const CAMERA_EVIDENCE_TYPE_NAME = 'video';
 
 function formatIncidentType(type: IncidentResponse['incident_type']) {
   if (!type) {
@@ -38,6 +39,83 @@ function formatDateTime(date: string | null, time?: string | null) {
   }
 
   return time ? `${date} · ${time.slice(0, 5)}` : date;
+}
+
+function formatReadableTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  const numericValue = Number(trimmedValue);
+  const date =
+    /^\d{10}$/.test(trimmedValue) || /^\d{13}$/.test(trimmedValue)
+      ? new Date(/^\d{10}$/.test(trimmedValue) ? numericValue * 1000 : numericValue)
+      : new Date(trimmedValue.replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
+
+  if (Number.isNaN(date.getTime())) {
+    return trimmedValue;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+function getEvidenceTitle(typeName: string | undefined, fileName: string) {
+  if (typeName === WRITTEN_NOTE_TYPE_NAME) {
+    return 'Written note';
+  }
+
+  if (typeName === VOICE_AUDIO_TYPE_NAME) {
+    return 'Voice note';
+  }
+
+  if (typeName === CAMERA_EVIDENCE_TYPE_NAME) {
+    return fileName.toLowerCase().includes('photo') ? 'Photo evidence' : 'Video evidence';
+  }
+
+  return fileName || 'Evidence item';
+}
+
+function getEvidenceIconName(typeName: string | undefined): keyof typeof Ionicons.glyphMap {
+  if (typeName === WRITTEN_NOTE_TYPE_NAME) {
+    return 'document-text-outline';
+  }
+
+  if (typeName === VOICE_AUDIO_TYPE_NAME) {
+    return 'mic-outline';
+  }
+
+  if (typeName === CAMERA_EVIDENCE_TYPE_NAME) {
+    return 'camera-outline';
+  }
+
+  return 'document-outline';
+}
+
+function formatEvidenceType(typeName: string | undefined) {
+  if (!typeName) {
+    return null;
+  }
+
+  return typeName
+    .split('_')
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(' ');
+}
+
+function formatTrustedTimestamp(item: EvidenceResponse) {
+  if (!item.timestamp_time) {
+    return null;
+  }
+
+  return formatReadableTimestamp(item.timestamp_time);
 }
 
 type StatusPanelProps = {
@@ -133,8 +211,17 @@ function decodeHexUtf8(hex: string) {
 }
 
 export default function IncidentDetailScreen() {
-  const { incidentId, refresh } = useLocalSearchParams<{ incidentId?: string; refresh?: string }>();
+  const { evidenceId, incidentId, refresh } = useLocalSearchParams<{
+    evidenceId?: string;
+    incidentId?: string;
+    refresh?: string;
+  }>();
+  const scrollViewRef = useRef<ScrollView>(null);
   const parsedIncidentId = useMemo(() => Number(incidentId), [incidentId]);
+  const targetedEvidenceId = useMemo(() => {
+    const parsedEvidenceId = Number(evidenceId);
+    return Number.isFinite(parsedEvidenceId) && parsedEvidenceId > 0 ? parsedEvidenceId : null;
+  }, [evidenceId]);
   const hasValidIncidentId = Number.isFinite(parsedIncidentId) && parsedIncidentId > 0;
 
   const [incident, setIncident] = useState<IncidentResponse | null>(null);
@@ -149,20 +236,6 @@ export default function IncidentDetailScreen() {
   const [noteErrorById, setNoteErrorById] = useState<Record<number, string>>({});
   const [isIncidentLoading, setIsIncidentLoading] = useState(true);
   const [isEvidenceLoading, setIsEvidenceLoading] = useState(false);
-
-  const writtenNoteTypeId = useMemo(
-    () =>
-      evidenceTypes.find((evidenceType) => evidenceType.type_name === WRITTEN_NOTE_TYPE_NAME)
-        ?.evidence_type_id ?? null,
-    [evidenceTypes]
-  );
-
-  const voiceAudioTypeId = useMemo(
-    () =>
-      evidenceTypes.find((evidenceType) => evidenceType.type_name === VOICE_AUDIO_TYPE_NAME)
-        ?.evidence_type_id ?? null,
-    [evidenceTypes]
-  );
 
   const evidenceTypeNameById = useMemo(() => {
     return evidenceTypes.reduce<Record<number, string>>((typesById, evidenceType) => {
@@ -229,7 +302,7 @@ export default function IncidentDetailScreen() {
     loadEvidenceTypes();
   }, [loadEvidence, loadEvidenceTypes, loadIncident, refresh]);
 
-  async function loadWrittenNoteContent(item: EvidenceResponse) {
+  const loadWrittenNoteContent = useCallback(async (item: EvidenceResponse) => {
     if (noteContentById[item.evidence_id]) {
       return;
     }
@@ -253,7 +326,7 @@ export default function IncidentDetailScreen() {
     } finally {
       setLoadingNoteId(null);
     }
-  }
+  }, [noteContentById]);
 
   async function openWrittenNote(item: EvidenceResponse) {
     if (expandedEvidenceId === item.evidence_id) {
@@ -265,9 +338,41 @@ export default function IncidentDetailScreen() {
     await loadWrittenNoteContent(item);
   }
 
+  useEffect(() => {
+    if (!targetedEvidenceId || evidence.length === 0) {
+      return;
+    }
+
+    const targetedEvidence = evidence.find((item) => item.evidence_id === targetedEvidenceId);
+
+    if (!targetedEvidence) {
+      return;
+    }
+
+    setExpandedEvidenceId(targetedEvidenceId);
+
+    if (evidenceTypeNameById[targetedEvidence.evidence_type_id] === WRITTEN_NOTE_TYPE_NAME) {
+      void loadWrittenNoteContent(targetedEvidence);
+    }
+  }, [evidence, evidenceTypeNameById, loadWrittenNoteContent, targetedEvidenceId]);
+
+  function handleEvidenceCardLayout(evidenceId: number, y: number) {
+    if (targetedEvidenceId !== evidenceId) {
+      return;
+    }
+
+    scrollViewRef.current?.scrollTo({
+      animated: true,
+      y: Math.max(0, y - 18),
+    });
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
           <Pressable
             accessibilityLabel="Back to case"
@@ -306,7 +411,7 @@ export default function IncidentDetailScreen() {
               value={formatDateTime(incident.incident_date, incident.incident_time)}
             />
             <MetadataRow label="Location" value={incident.location} />
-            <MetadataRow label="Created" value={incident.creation_date} />
+            <MetadataRow label="Created" value={formatReadableTimestamp(incident.creation_date)} />
             {incident.description ? (
               <Text style={styles.description}>{incident.description}</Text>
             ) : null}
@@ -358,35 +463,29 @@ export default function IncidentDetailScreen() {
         {!isEvidenceLoading && !evidenceError && evidence.length > 0 ? (
           <View style={styles.evidenceList}>
             {evidence.map((item) => {
-              const isWrittenNote =
-                writtenNoteTypeId !== null && item.evidence_type_id === writtenNoteTypeId;
-              const isVoiceNote =
-                voiceAudioTypeId !== null && item.evidence_type_id === voiceAudioTypeId;
+              const typeName = evidenceTypeNameById[item.evidence_type_id];
+              const isWrittenNote = typeName === WRITTEN_NOTE_TYPE_NAME;
+              const isVoiceNote = typeName === VOICE_AUDIO_TYPE_NAME;
+              const isTargetedEvidence = targetedEvidenceId === item.evidence_id;
               const expanded = expandedEvidenceId === item.evidence_id;
               const noteContent = noteContentById[item.evidence_id];
               const noteError = noteErrorById[item.evidence_id];
-              const typeName = evidenceTypeNameById[item.evidence_type_id];
-              const evidenceTitle = isWrittenNote
-                ? 'Written note'
-                : isVoiceNote
-                  ? 'Voice note'
-                  : item.file_name || 'Evidence item';
+              const evidenceTitle = getEvidenceTitle(typeName, item.file_name);
+              const trustedTimestamp = formatTrustedTimestamp(item);
+              const evidenceTypeLabel = formatEvidenceType(typeName);
 
               return (
                 <Pressable
                   accessibilityRole={isWrittenNote ? 'button' : undefined}
                   key={item.evidence_id}
+                  onLayout={(event) =>
+                    handleEvidenceCardLayout(item.evidence_id, event.nativeEvent.layout.y)
+                  }
                   onPress={isWrittenNote ? () => openWrittenNote(item) : undefined}
-                  style={styles.evidenceCard}>
+                  style={[styles.evidenceCard, isTargetedEvidence ? styles.evidenceCardActive : null]}>
                   <View style={styles.evidenceIcon}>
                     <Ionicons
-                      name={
-                        isWrittenNote
-                          ? 'document-text-outline'
-                          : isVoiceNote
-                            ? 'mic-outline'
-                            : 'document-outline'
-                      }
+                      name={getEvidenceIconName(typeName)}
                       size={22}
                       color="#1F5857"
                     />
@@ -402,9 +501,13 @@ export default function IncidentDetailScreen() {
                         />
                       ) : null}
                     </View>
-                    <Text style={styles.evidenceMeta}>Created {item.created_at}</Text>
                     <Text style={styles.evidenceMeta}>
-                      {typeName ? `Type ${typeName}` : `Type ID #${item.evidence_type_id}`}
+                      Created {trustedTimestamp ?? formatReadableTimestamp(item.created_at)}
+                    </Text>
+                    <Text style={styles.evidenceMeta}>
+                      {evidenceTypeLabel
+                        ? `Type ${evidenceTypeLabel}`
+                        : `Type ID #${item.evidence_type_id}`}
                     </Text>
                     {(isWrittenNote || isVoiceNote) && item.file_name ? (
                       <Text style={styles.evidenceMeta}>File {item.file_name}</Text>
@@ -610,6 +713,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     padding: 16,
+  },
+  evidenceCardActive: {
+    backgroundColor: '#F7FBFA',
+    borderColor: '#75AFA4',
+    borderWidth: 2,
   },
   evidenceIcon: {
     alignItems: 'center',

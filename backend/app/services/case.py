@@ -40,6 +40,10 @@ async def get_cases(db: AsyncSession, user_id: int) -> list[Case]:
     except CaseNotFoundError:
         return []
 
+async def get_all_cases(db: AsyncSession) -> list[Case]:
+    result = await db.execute(select(Case).order_by(Case.case_id))
+    return result.scalars().all()
+
 async def get_case(db: AsyncSession, user_id: int, case_id: int) -> Case:
     result = await db.execute(
         select(Case).where(Case.case_id == case_id, Case.user_id == user_id)

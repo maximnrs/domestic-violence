@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 from uuid import uuid4
 
@@ -88,6 +89,22 @@ def reset_database():
     asyncio.run(dispose_engine())
     asyncio.run(drop_schema())
     asyncio.run(dispose_engine())
+
+
+@pytest.fixture(autouse=True)
+def stub_trusted_timestamp(monkeypatch):
+    async def request_timestamp(file_bytes: bytes) -> dict:
+        return {
+            "authority": "integration-test-tsa",
+            "hash_algorithm": "SHA-256",
+            "message_imprint": hashlib.sha256(file_bytes).hexdigest(),
+            "nonce": None,
+            "token_der": "",
+            "status": "granted",
+            "time": "2026-06-23T00:00:00Z",
+        }
+
+    monkeypatch.setattr("app.core.timestamp.request_timestamp", request_timestamp)
 
 
 def test_authenticated_user_can_upload_and_download_evidence_end_to_end():

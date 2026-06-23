@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.schemas import EvidenceCreate, EvidenceResponse
 from app.models.user import User
+from app.core.timestamp import TimestampAuthorityError
 from app.services import evidence as evidence_service
 from app.services import evidencetype as evidencetype_service
 from app.services import incident as incident_service
@@ -25,6 +26,7 @@ async def get_evidence_types(
     responses={
         400: {"description": "Evidence upload processing failed"},
         404: {"description": "Incident not found or access denied"},
+        503: {"description": "Trusted timestamp authority unavailable"},
     },
 )
 async def upload_evidence(
@@ -69,8 +71,32 @@ async def upload_evidence(
             data
         )
         return evidence
+    except TimestampAuthorityError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.get(
+    "/admin/",
+    response_model=list[EvidenceResponse],
+    response_model_exclude={
+        "__all__": {
+            "timestamp_token",
+            "timestamp_authority",
+            "timestamp_status",
+            "timestamp_hash_algorithm",
+            "timestamp_message_imprint",
+            "timestamp_nonce",
+            "timestamp_time",
+        }
+    },
+)
+async def get_admin_incident_evidence(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.services import metadata
+    return await metadata.get_all_evidence_for_admin(db)
 
 @router.get(
     "/{evidence_id}",
