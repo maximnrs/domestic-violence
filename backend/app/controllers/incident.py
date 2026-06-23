@@ -30,6 +30,13 @@ async def get_incidents(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
+@router.get("/admin/", response_model=list[IncidentResponse])
+async def get_admin_incidents(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await incident_service.get_all_incidents(db)
+
 @router.get("/{incident_id}", response_model=IncidentResponse)
 async def get_incident(
     incident_id: int,

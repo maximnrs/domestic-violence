@@ -77,6 +77,17 @@ async def upload_evidence(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.get(
+    "/admin/",
+    response_model=list[EvidenceResponse],
+)
+async def get_admin_incident_evidence(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.services import metadata
+    return await metadata.get_all_evidence_for_admin(db)
+
+@router.get(
     "/{evidence_id}",
     response_model=EvidenceResponse,
     responses={404: {"description": "Evidence not found or access denied"}},

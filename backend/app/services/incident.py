@@ -28,11 +28,21 @@ async def create_incident(db: AsyncSession, user_id: int, data: IncidentCreate) 
     await db.refresh(incident)
     return incident
 
-async def get_incidents(db: AsyncSession, case_id: int) -> list[Incident]:
-    await verify_case_ownership(db, case_id)
+async def get_incidents(db: AsyncSession, user_id: int, case_id: int) -> list[Incident]:
+    await verify_case_ownership(db, case_id, user_id)
     result = await db.execute(
         select(Incident).where(Incident.case_id == case_id)
     )
+    return result.scalars().all()
+
+async def get_incidents_for_case(db: AsyncSession, case_id: int) -> list[Incident]:
+    result = await db.execute(
+        select(Incident).where(Incident.case_id == case_id)
+    )
+    return result.scalars().all()
+
+async def get_all_incidents(db: AsyncSession) -> list[Incident]:
+    result = await db.execute(select(Incident).order_by(Incident.incident_id))
     return result.scalars().all()
 
 async def get_incident(db: AsyncSession, user_id: int, incident_id: int) -> Incident:
