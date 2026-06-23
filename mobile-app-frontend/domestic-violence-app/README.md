@@ -1,50 +1,65 @@
-# Welcome to your Expo app 👋
+# Nura Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The mobile app is an Expo and React Native application for client-side case access, incident documentation, written notes, voice notes, camera evidence capture, and settings.
 
-## Get started
+## Requirements
 
-1. Install dependencies
+- Node.js 20+
+- npm
+- Expo CLI through `npx expo`
+- Android Studio, Xcode, Expo Go, or an Expo development build depending on target device
+- Running Nura backend API
 
-   ```bash
-   npm install
-   ```
+## Configuration
 
-2. Start the app
+Create `mobile-app-frontend/domestic-violence-app/.env`:
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```env
+EXPO_PUBLIC_API_URL=http://localhost:8000
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+For Android emulator development, the app defaults to `http://10.0.2.2:8000` when the variable is not set. For iOS simulator and web, it defaults to `http://localhost:8000`.
 
-## Learn more
+For a deployed API, use the public API URL:
 
-To learn more about developing your project with Expo, look at the following resources:
+```env
+EXPO_PUBLIC_API_URL=https://api-evisafe.thijsvdweijer.nl
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Local Development
 
-## Join the community
+```bash
+npm install
+npx expo start
+```
 
-Join our community of developers creating universal apps.
+Common targets:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run android
+npm run ios
+npm run web
+```
+
+## Quality Checks
+
+```bash
+npm run lint
+```
+
+## Project Structure
+
+| Path | Purpose |
+| --- | --- |
+| `app/` | Expo Router screens and tab routes. |
+| `components/` | Shared UI and evidence-specific components. |
+| `constants/` | Theme constants. |
+| `hooks/` | Shared React hooks. |
+| `services/` | API client and domain service calls. |
+| `utils/` | Utility functions. |
+
+## Notes
+
+- Authentication tokens are currently held in memory by the API service module.
+- Camera, audio, and file capabilities depend on the selected Expo runtime and platform permissions.
+- Do not commit `.env` files containing private endpoints or credentials.

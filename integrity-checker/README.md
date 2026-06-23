@@ -1,122 +1,100 @@
-# Evidence Integrity System
+# Evidence Integrity Checker
 
-How digital evidence is stored, protected, and verified.
-
----
+The integrity checker verifies that evidence stored in MinIO still matches the HMAC-SHA-256 fingerprints recorded by the Nura backend. It contains a small FastAPI dashboard/API for manual checks and a scheduled worker for continuous verification.
 
 ## Architecture
 
+```text
+Integrity API / dashboard
+Scheduled integrity worker
+          |
+          +--> PostgreSQL evidence and encryption tables
+          +--> MinIO evidence objects
+          +--> OpenBao / Vault HMAC keys
 ```
-Victim Device → API (FastAPI) → MinIO (encrypted storage)
-                     ↓                    ↑
-               PostgreSQL DB    Integrity Checker (scheduled)
-                     ↑                    ↑
-                OpenBao (HMAC key management)
+
+Verification flow:
+
+1. Read evidence metadata and stored HMAC hashes from PostgreSQL.
+2. Retrieve the per-file HMAC key from OpenBao.
+3. Download the evidence object from MinIO.
+4. Recompute the HMAC-SHA-256 fingerprint.
+5. Mark the record as `verified`, `tampered`, `unverifiable`, or `error`.
+6. Write the result to `integrity_check_log`.
+
+## Services
+
+| Service | Purpose |
+| --- | --- |
+| `api/` | FastAPI app with a browser dashboard, evidence list, manual check endpoint, logs, and health check. |
+| `integrity_checker/` | Scheduled worker that continuously verifies all evidence records. |
+| `api-server-fix/` | Utility scripts related to HMAC key storage and rebaselining older data. |
+| `docker/openbao/` | OpenBao Docker support files. |
+
+## Configuration
+
+Copy `.env.example` to `.env` and fill in values that match the main Nura API infrastructure:
+
+```env
+DATABASE_URL=postgresql://DB_USER:DB_PASS@192.168.178.X/domestic
+MINIO_ENDPOINT=http://192.168.178.X:9000
+MINIO_ACCESS_KEY=your_minio_user
+MINIO_SECRET_KEY=your_minio_password
+MINIO_BUCKET=domestic
+VAULT_URL=https://192.168.178.X:8200
+VAULT_TOKEN=your_vault_token
+VAULT_SKIP_VERIFY=false
+CHECK_INTERVAL_SECONDS=60
 ```
 
-- **HMAC-SHA-256** fingerprinting (key stored in OpenBao, never alongside files)
-- **Integrity Checker** runs on schedule AND is triggered directly on every upload
-- **Audit Logs** are insert-only (PostgreSQL rules prevent UPDATE/DELETE)
-- **Alert system** logs to stdout when tampering is detected
+The checker must use the same PostgreSQL database, MinIO bucket, and OpenBao secrets as the backend that uploaded the evidence.
 
----
+## Running with Docker Compose
 
-## Start the system
+From this directory:
 
 ```bash
 docker compose up --build
 ```
 
-Wait ~20 seconds for all services to initialise, then:
+The current Compose file uses `network_mode: host` so the containers can reach infrastructure on the host or LAN. In that mode, ports are exposed directly by the containers.
 
-| Service        | URL                          |
-|----------------|------------------------------|
-| API + Swagger  | http://localhost:8000/docs   |
-| MinIO Console  | http://localhost:9001        |
-| OpenBao        | http://localhost:8200        |
-| PostgreSQL     | localhost:5432               |
+Typical URLs:
 
-MinIO login: `minio_admin` / `minio_password`
+| Service | URL |
+| --- | --- |
+| Dashboard | `http://localhost:8001` |
+| API docs | `http://localhost:8001/docs` |
+| Health check | `http://localhost:8001/health` |
 
----
-
-## Test the system
-
-### 1. Upload a file (evidence)
-
-```bash
-curl -X POST http://localhost:8000/evidence/upload \
-  -F "file=@/path/to/your/file.jpg"
-```
-
-Returns the file ID, object key, HMAC hash, and an immediate integrity check result.
-
-### 2. List all uploaded evidence
-
-```bash
-curl http://localhost:8000/evidence
-```
-
-### 3. Manually trigger an integrity check
-
-Copy the `object_key` from the upload response, then:
-
-```bash
-curl -X POST "http://localhost:8000/evidence/<object_key>/check"
-```
-
-### 4. Simulate tampering (for testing)
-
-Go to the MinIO console at http://localhost:9001, find the file in the `evidence` bucket, download it, modify it, and re-upload it with the same object key. Then run the check again — it will return `tampered` and write to the audit log.
-
-### 5. View audit logs
-
-```bash
-# All logs
-curl http://localhost:8000/audit-logs
-
-# Logs for a specific file
-curl "http://localhost:8000/audit-logs/<object_key>"
-```
-
----
-
-## Stop the system
+Stop the services:
 
 ```bash
 docker compose down
 ```
 
-To also remove all stored data (volumes):
+## API Endpoints
 
-```bash
-docker compose down -v
-```
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Browser dashboard. |
+| `GET` | `/evidence` | List evidence and integrity status. |
+| `POST` | `/evidence/{evidence_id}/check` | Manually verify a single evidence file. |
+| `GET` | `/integrity-logs` | List integrity check logs. |
+| `GET` | `/integrity-logs/{evidence_id}` | List logs for one evidence record. |
+| `GET` | `/health` | Health check. |
 
----
+## Interpreting Results
 
-## Project structure
-
-```
-integrity_checker/
-├── docker-compose.yml
-├── docker/
-│   └── init.sql              # PostgreSQL schema
-├── api/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── main.py               # FastAPI routes
-│   └── utils.py              # Shared HMAC / MinIO / OpenBao / DB helpers
-└── integrity_checker/
-    ├── Dockerfile
-    ├── requirements.txt
-    └── checker.py            # Scheduled integrity check loop
-```
-
----
+| Result | Meaning |
+| --- | --- |
+| `verified` | The recomputed HMAC matches the stored HMAC. |
+| `tampered` | The object bytes no longer match the stored HMAC. |
+| `unverifiable` | The required HMAC key was not found in OpenBao. |
+| `error` | Verification failed for an operational reason such as storage or database access. |
 
 ## Notes
 
-- **Argon2ID** (password hashing) is under research and not yet implemented.
-- **Queue system** (Redis/Celery) is under research and not yet implemented.
-- OpenBao runs in **dev mode** for local development. For production, use a persistent unsealed Vault/OpenBao instance.
+- OpenBao/Vault access is security-sensitive. Do not commit real tokens.
+- Files uploaded before HMAC keys were stored in OpenBao may be marked `unverifiable`.
+- `VAULT_SKIP_VERIFY=true` may be useful for local self-signed certificates, but should not be used casually in production.
