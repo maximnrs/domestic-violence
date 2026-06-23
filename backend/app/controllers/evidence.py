@@ -79,6 +79,17 @@ async def upload_evidence(
 @router.get(
     "/admin/",
     response_model=list[EvidenceResponse],
+    response_model_exclude={
+        "__all__": {
+            "timestamp_token",
+            "timestamp_authority",
+            "timestamp_status",
+            "timestamp_hash_algorithm",
+            "timestamp_message_imprint",
+            "timestamp_nonce",
+            "timestamp_time",
+        }
+    },
 )
 async def get_admin_incident_evidence(
     db: AsyncSession = Depends(get_db),

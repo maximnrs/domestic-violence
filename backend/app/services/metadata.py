@@ -118,3 +118,10 @@ async def get_incident_evidence(db: AsyncSession, incident_id: int, user_id: int
         )
     )
     return [hydrate_trusted_timestamp_time(evidence) for evidence in result.scalars().all()]
+
+async def get_all_evidence_for_admin(db: AsyncSession) -> list[Evidence]:
+    """
+    Get all evidence records for administrative review.
+    """
+    result = await db.execute(select(Evidence).order_by(Evidence.evidence_id))
+    return [hydrate_trusted_timestamp_time(evidence) for evidence in result.scalars().all()]
