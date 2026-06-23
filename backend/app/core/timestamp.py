@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import requests
 from pyasn1.codec.der import decoder
-from pyasn1.type import namedtype, univ, useful
+from pyasn1.type import namedtype, tag, univ, useful
 
 TSA_URL = "http://timestamp.sectigo.com/rfc3161"
 SHA256_OID = "2.16.840.1.101.3.4.2.1"
@@ -48,7 +48,27 @@ class EncapsulatedContentInfo(univ.Sequence):
     )
 
 
+class CmsEncapsulatedContentInfo(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("eContentType", univ.ObjectIdentifier()),
+        namedtype.OptionalNamedType(
+            "eContent",
+            univ.OctetString().subtype(
+                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
+            ),
+        ),
+    )
+
+
 class SignerInfos(univ.SetOf):
+    componentType = univ.Any()
+
+
+class CertificateSet(univ.SetOf):
+    componentType = univ.Any()
+
+
+class RevocationInfoChoices(univ.SetOf):
     componentType = univ.Any()
 
 
@@ -60,6 +80,30 @@ class SignedData(univ.Sequence):
             univ.SetOf(componentType=AlgorithmIdentifier()),
         ),
         namedtype.NamedType("encapContentInfo", EncapsulatedContentInfo()),
+        namedtype.NamedType("signerInfos", SignerInfos()),
+    )
+
+
+class CmsSignedData(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType("version", univ.Integer()),
+        namedtype.NamedType(
+            "digestAlgorithms",
+            univ.SetOf(componentType=AlgorithmIdentifier()),
+        ),
+        namedtype.NamedType("encapContentInfo", CmsEncapsulatedContentInfo()),
+        namedtype.OptionalNamedType(
+            "certificates",
+            CertificateSet().subtype(
+                implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
+            ),
+        ),
+        namedtype.OptionalNamedType(
+            "crls",
+            RevocationInfoChoices().subtype(
+                implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 1)
+            ),
+        ),
         namedtype.NamedType("signerInfos", SignerInfos()),
     )
 
@@ -168,6 +212,63 @@ def _format_generalized_time(value: useful.GeneralizedTime) -> str:
     return parsed_time.isoformat().replace("+00:00", "Z")
 
 
+def _decode_signed_data(content: univ.Any):
+    content_bytes = bytes(content)
+    try:
+        return decoder.decode(
+            content_bytes,
+            asn1Spec=CmsSignedData().subtype(
+                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
+            ),
+        )
+    except Exception:
+        return decoder.decode(content_bytes, asn1Spec=SignedData())
+
+
+def _decode_tst_info(econtent) -> tuple[useful.GeneralizedTime, str, str | None]:
+    econtent_bytes = bytes(econtent)
+    try:
+        tst_info, rest = decoder.decode(econtent_bytes, asn1Spec=TSTInfo())
+        if rest:
+            raise ValueError("Unexpected trailing data in TSTInfo")
+
+        imprint = tst_info["messageImprint"]
+        hash_algorithm = str(imprint["hashAlgorithm"]["algorithm"])
+        if hash_algorithm != SHA256_OID:
+            raise ValueError(f"Unsupported timestamp hash algorithm: {hash_algorithm}")
+
+        nonce = tst_info["nonce"]
+        return (
+            tst_info["genTime"],
+            bytes(imprint["hashedMessage"]).hex(),
+            str(int(nonce)) if nonce.hasValue() else None,
+        )
+    except Exception:
+        tst_info, rest = decoder.decode(econtent_bytes)
+        if rest:
+            raise ValueError("Unexpected trailing data in TSTInfo")
+        if len(tst_info) < 5:
+            raise ValueError("Timestamp token TSTInfo is incomplete")
+
+        imprint = tst_info.getComponentByPosition(2)
+        hash_algorithm = str(imprint.getComponentByPosition(0).getComponentByPosition(0))
+        if hash_algorithm != SHA256_OID:
+            raise ValueError(f"Unsupported timestamp hash algorithm: {hash_algorithm}")
+
+        nonce = None
+        for index in range(5, len(tst_info)):
+            component = tst_info.getComponentByPosition(index)
+            if component.tagSet == univ.Integer.tagSet:
+                nonce = str(int(component))
+                break
+
+        return (
+            tst_info.getComponentByPosition(4),
+            bytes(imprint.getComponentByPosition(1)).hex(),
+            nonce,
+        )
+
+
 def _parse_timestamp_response(response_der: bytes) -> dict:
     try:
         response, rest = decoder.decode(response_der, asn1Spec=TimeStampResp())
@@ -179,7 +280,7 @@ def _parse_timestamp_response(response_der: bytes) -> dict:
             raise ValueError(f"TSA did not grant timestamp request: status {status_code}")
 
         token = response["timeStampToken"]
-        signed_data, rest = decoder.decode(token["content"], asn1Spec=SignedData())
+        signed_data, rest = _decode_signed_data(token["content"])
         if rest:
             raise ValueError("Unexpected trailing data in signed timestamp token")
 
@@ -187,23 +288,14 @@ def _parse_timestamp_response(response_der: bytes) -> dict:
         if str(encap_content["eContentType"]) != TST_INFO_OID:
             raise ValueError("Timestamp token does not contain TSTInfo")
 
-        tst_info, rest = decoder.decode(encap_content["eContent"], asn1Spec=TSTInfo())
-        if rest:
-            raise ValueError("Unexpected trailing data in TSTInfo")
-
-        imprint = tst_info["messageImprint"]
-        hash_algorithm = str(imprint["hashAlgorithm"]["algorithm"])
-        if hash_algorithm != SHA256_OID:
-            raise ValueError(f"Unsupported timestamp hash algorithm: {hash_algorithm}")
-
-        nonce = tst_info["nonce"]
+        gen_time, message_imprint, nonce = _decode_tst_info(encap_content["eContent"])
 
         return {
             "status": "granted",
             "token_info": {
-                "time": _format_generalized_time(tst_info["genTime"]),
-                "message_imprint": bytes(imprint["hashedMessage"]).hex(),
-                "nonce": str(int(nonce)) if nonce.hasValue() else None,
+                "time": _format_generalized_time(gen_time),
+                "message_imprint": message_imprint,
+                "nonce": nonce,
             },
         }
     except Exception as error:
